@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AIProviderConnection,
   AIProviderDefinition,
@@ -36,6 +36,11 @@ export default function AIProviderCard({
   onTestSaved,
   onDelete,
 }: Props) {
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [replacing, setReplacing] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -68,14 +73,16 @@ export default function AIProviderCard({
     setNotice(null);
     try {
       const result = await onTestTransient(apiKey, configurationResourceId);
+      if (!active.current) return;
       setNotice({
         kind: result.ok ? "success" : "error",
         text: result.ok ? "连接测试通过；凭证尚未保存。" : safeAIProviderStatusMessage(result.status),
       });
     } catch (error) {
+      if (!active.current) return;
       setNotice({ kind: "error", text: safeAIProviderErrorMessage(error) });
     } finally {
-      setBusyAction(null);
+      if (active.current) setBusyAction(null);
     }
   };
 
@@ -84,15 +91,17 @@ export default function AIProviderCard({
     setNotice(null);
     try {
       const result = await onTestSaved();
+      if (!active.current) return;
       setNotice({
         kind: result.ok ? "success" : "error",
         text: result.ok ? "已保存连接验证通过。" : safeAIProviderStatusMessage(result.status),
       });
       await onRefresh();
     } catch (error) {
+      if (!active.current) return;
       setNotice({ kind: "error", text: safeAIProviderErrorMessage(error) });
     } finally {
-      setBusyAction(null);
+      if (active.current) setBusyAction(null);
     }
   };
 
@@ -102,6 +111,7 @@ export default function AIProviderCard({
     try {
       const wasConnected = Boolean(connection);
       await onPersist(apiKey, configurationResourceId);
+      if (!active.current) return;
       clearSecretInput();
       setReplacing(false);
       setNotice({
@@ -110,9 +120,10 @@ export default function AIProviderCard({
       });
       await onRefresh();
     } catch (error) {
+      if (!active.current) return;
       setNotice({ kind: "error", text: safeAIProviderErrorMessage(error) });
     } finally {
-      setBusyAction(null);
+      if (active.current) setBusyAction(null);
     }
   };
 
@@ -121,15 +132,17 @@ export default function AIProviderCard({
     setNotice(null);
     try {
       await onDelete();
+      if (!active.current) return;
       clearSecretInput();
       setReplacing(false);
       setDeleteOpen(false);
       setNotice({ kind: "success", text: `${provider.displayName} 连接已删除。` });
       await onRefresh();
     } catch (error) {
+      if (!active.current) return;
       setNotice({ kind: "error", text: safeAIProviderErrorMessage(error) });
     } finally {
-      setBusyAction(null);
+      if (active.current) setBusyAction(null);
     }
   };
 

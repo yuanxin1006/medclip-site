@@ -2936,7 +2936,7 @@ test("DeepSeek HTTP errors expose only safe diagnostic categories", async () => 
     const error = await captureTaskError(() => executor(deepseekContext("music.creative_brief")));
     assert.equal(error.code, testCase.expected);
     assert.equal(error.diagnostic?.httpStatus, testCase.status);
-    assert.equal(error.diagnostic?.providerErrorCode, testCase.providerCode);
+    assert.equal(error.diagnostic?.providerErrorCode, expectedLocalHTTPCode(testCase.expected));
     assert.equal(error.diagnostic?.failureStage, "provider_response");
     assert.equal(error.diagnostic?.providerCallCount, 1);
     assert.equal(error.diagnostic?.failureClass, "UPSTREAM_HTTP_ERROR");
@@ -3998,8 +3998,9 @@ test("Kimi 429 diagnostics distinguish safe provider categories without exposing
     assert.equal(error.code, testCase.expected);
     assert.equal(error.diagnostic?.provider, "kimi");
     assert.equal(error.diagnostic?.httpStatus, 429);
-    assert.equal(error.diagnostic?.providerErrorCode, testCase.code);
-    assert.equal(error.diagnostic?.sanitizedProviderErrorMessage, testCase.message);
+    assert.equal(error.diagnostic?.providerErrorCode, expectedLocalHTTPCode(testCase.expected));
+    assert.ok(error.diagnostic?.sanitizedProviderErrorMessage);
+    assert.notEqual(error.diagnostic?.sanitizedProviderErrorMessage, testCase.message);
     assert.equal(error.diagnostic?.providerCallCount, 1);
     assert.equal(error.diagnostic?.failureClass, "UPSTREAM_HTTP_ERROR");
     assert.equal(error.diagnostic?.providerResponseReceived, true);
@@ -4007,7 +4008,7 @@ test("Kimi 429 diagnostics distinguish safe provider categories without exposing
     assert.equal(error.diagnostic?.canonicalValidationReached, false);
     assert.equal(calls, 1);
     const serialized = JSON.stringify(safeTaskErrorResponse(error).body);
-    assert.match(serialized, new RegExp(testCase.code));
+    assert.match(serialized, new RegExp(expectedLocalHTTPCode(testCase.expected)));
     assert.doesNotMatch(serialized, /fixture-provider-key-not-real|Authorization|raw_response/);
   }
 });
@@ -4286,7 +4287,7 @@ test("Doubao HTTP failures expose only safe Ark categories", async () => {
     assert.equal(error.code, testCase.expected);
     assert.equal(error.diagnostic?.provider, "doubao");
     assert.equal(error.diagnostic?.httpStatus, testCase.status);
-    assert.equal(error.diagnostic?.providerErrorCode, testCase.providerCode);
+    assert.equal(error.diagnostic?.providerErrorCode, expectedLocalHTTPCode(testCase.expected));
     assert.equal(error.diagnostic?.providerCallCount, 1);
     assert.equal(calls, 1);
     assert.doesNotMatch(JSON.stringify(safeTaskErrorResponse(error).body), /raw-provider-message-must-not-return|fixture-provider-key-not-real/);
@@ -4529,3 +4530,7 @@ test("credential Provider adapters and Doubao validation timeout remain unchange
   assert.match(kimiSource, /https:\/\/api\.moonshot\.cn\/v1/);
   assert.match(doubaoSource, /DOUBAO_VALIDATION_TIMEOUT_MS = 30_000/);
 });
+
+function expectedLocalHTTPCode(code: string): string {
+  return ({ PROVIDER_PAYMENT_OR_QUOTA_ERROR: "QUOTA_OR_BALANCE", PROVIDER_AUTH_ERROR: "AUTH_REJECTED", PROVIDER_RATE_LIMIT: "RATE_LIMITED", PROVIDER_BAD_REQUEST: "CONFIGURATION_REJECTED", PROVIDER_HTTP_ERROR: "UPSTREAM_UNAVAILABLE", PROVIDER_CONFIGURATION_REQUIRED: "ACCOUNT_TIER_RESTRICTED", PROVIDER_UNAVAILABLE: "CAPACITY_EXHAUSTED" } as Record<string,string>)[code];
+}

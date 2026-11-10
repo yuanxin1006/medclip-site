@@ -491,7 +491,7 @@ test("provider validation preserves bounded safe upstream diagnostics without ch
 
   assert.equal(result.status, "PROVIDER_CONFIGURATION_REQUIRED");
   assert.equal(result.diagnostic?.upstreamHttpStatus, 404);
-  assert.equal(result.diagnostic?.upstreamProviderErrorCode, "ModelNotOpen");
+  assert.equal(result.diagnostic?.upstreamProviderErrorCode, "PROVIDER_CONFIGURATION_REQUIRED");
   assert.ok(result.diagnostic?.sanitizedProviderErrorMessage);
   assert.ok(result.diagnostic.sanitizedProviderErrorMessage.length <= 160);
   assert.equal(JSON.stringify(result).includes(leakedKey), false);

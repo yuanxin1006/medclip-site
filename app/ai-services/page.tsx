@@ -2,7 +2,7 @@
 
 import "./ai-services.css";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIProviderCard from "../../components/ai/AIProviderCard";
 import AIServiceCostNotice from "../../components/ai/AIServiceCostNotice";
 import { useAuth } from "../../components/auth/AuthProvider";
@@ -21,32 +21,54 @@ import { safeAIProviderErrorMessage } from "../../lib/ai/ui";
 
 export default function AIServicesPage() {
   const { user, loading: authLoading } = useAuth();
+  if (authLoading) return <main className="platform-page ai-services-page">
+    <section aria-live="polite" className="ai-services-gate">正在恢复登录状态…</section>
+  </main>;
+  if (!user) {
+    return <main className="platform-page ai-services-page"><AnonymousLandingGate /></main>;
+  }
+
+  return <AccountAIServices key={user.id} userId={user.id} />;
+}
+
+function AccountAIServices({ userId }: { userId: string }) {
+  const active = useRef(false);
+  const lifetime = useRef<AbortController | null>(null);
+  const listVersion = useRef(0);
   const [connections, setConnections] = useState<AIProviderConnection[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
 
   const loadConnections = useCallback(async (showLoading = true) => {
-    if (!user) return false;
+    if (!active.current) return false;
+    const version = ++listVersion.current;
+    const current = () => active.current && version === listVersion.current;
     if (showLoading) setListLoading(true);
     setPageError(null);
     try {
-      setConnections(await listAIProviderConnections());
+      const next = await listAIProviderConnections(lifetime.current?.signal);
+      if (!current()) return false;
+      setConnections(next.filter((connection) => connection.user_id === userId));
       return true;
     } catch (error) {
-      setPageError(safeAIProviderErrorMessage(error));
+      if (current()) setPageError(safeAIProviderErrorMessage(error));
       return false;
     } finally {
-      if (showLoading) setListLoading(false);
+      if (current()) setListLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (user) void loadConnections();
-    else {
-      setConnections([]);
-      setPageError(null);
-    }
-  }, [loadConnections, user]);
+    active.current = true;
+    const controller = new AbortController();
+    lifetime.current = controller;
+    void loadConnections();
+    return () => {
+      active.current = false;
+      controller.abort();
+      listVersion.current += 1;
+    };
+  }, [loadConnections]);
 
   const byProvider = useMemo(
     () => new Map(connections.map((connection) => [connection.provider, connection])),
@@ -54,6 +76,7 @@ export default function AIServicesPage() {
   );
 
   const replaceConnection = (connection: AIProviderConnection) => {
+    if (!active.current || connection.user_id !== userId) return;
     setConnections((current) => [
       ...current.filter((item) => item.provider !== connection.provider),
       connection,
@@ -61,23 +84,12 @@ export default function AIServicesPage() {
   };
 
   const refreshAfterMutation = async () => {
+    if (!active.current) return;
     const refreshed = await loadConnections(false);
-    if (!refreshed) {
+    if (active.current && !refreshed) {
       setPageError("操作已经完成，但最新连接状态暂时无法刷新。请稍后重试。");
     }
   };
-
-  if (authLoading) {
-    return <main className="platform-page ai-services-page">
-      <section aria-live="polite" className="ai-services-gate">正在恢复登录状态…</section>
-    </main>;
-  }
-
-  if (!user) {
-    return <main className="platform-page ai-services-page">
-      <AnonymousLandingGate />
-    </main>;
-  }
 
   return <main className="platform-page ai-services-page">
     <section className="platform-page-heading">
@@ -106,24 +118,29 @@ export default function AIServicesPage() {
         const connection = byProvider.get(provider.id) ?? null;
         return <AIProviderCard
           connection={connection}
-          key={provider.id}
+          key={`${userId}:${provider.id}`}
           onDelete={async () => {
-            await deleteAIProviderCredential(provider.id);
+            if (!active.current) return;
+            listVersion.current += 1;
+            await deleteAIProviderCredential(provider.id, lifetime.current?.signal);
+            if (!active.current) return;
             setConnections((current) => current.filter((item) => item.provider !== provider.id));
           }}
           onPersist={async (apiKey, providerResourceId) => {
+            if (!active.current) throw new Error("Account changed");
+            listVersion.current += 1;
             const saved = connection
-              ? await updateAIProviderCredential(provider.id, apiKey, { providerResourceId })
-              : await saveAIProviderCredential(provider.id, apiKey, { providerResourceId });
+              ? await updateAIProviderCredential(provider.id, apiKey, { providerResourceId, signal: lifetime.current?.signal })
+              : await saveAIProviderCredential(provider.id, apiKey, { providerResourceId, signal: lifetime.current?.signal });
             replaceConnection(saved);
             return saved;
           }}
           onRefresh={refreshAfterMutation}
-          onTestSaved={() => testSavedCredential(provider.id)}
+          onTestSaved={() => testSavedCredential(provider.id, lifetime.current?.signal)}
           onTestTransient={(apiKey, providerResourceId) => testTransientCredential(
             provider.id as AIProviderId,
             apiKey,
-            { providerResourceId },
+            { providerResourceId, signal: lifetime.current?.signal },
           )}
           provider={provider}
         />;

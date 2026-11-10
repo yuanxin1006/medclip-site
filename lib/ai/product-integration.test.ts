@@ -25,7 +25,7 @@ function invocation(source: string): string {
 test("create-music and editor share safe connected-provider metadata", () => {
   assert.match(createMusicSource, /AITaskProviderSelector/);
   assert.match(editorSource, /AITaskProviderSelector/);
-  assert.match(selectorSource, /listAIProviderConnections\(\)/);
+  assert.match(selectorSource, /listAIProviderConnections\(lifetime\.current\?\.signal\)/);
   assert.match(selectorSource, /AI_PROVIDER_DEFINITIONS\.filter/);
   assert.match(selectorSource, /provider\.taskCapabilities\.includes\(capability\)/);
   assert.match(selectorSource, /selectableProviders\.map/);

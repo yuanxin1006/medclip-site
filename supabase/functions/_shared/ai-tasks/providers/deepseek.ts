@@ -1,3 +1,4 @@
+import { fixedProviderHTTPDiagnostic } from "../provider-http-diagnostic.ts";
 import {
   SafeTaskError,
   type AITaskStatus,
@@ -183,22 +184,8 @@ function normalizeUsage(value: unknown): SafeTaskUsage | null {
   };
 }
 
-async function safeProviderErrorCode(response: Response): Promise<string | undefined> {
-  try {
-    const payload: unknown = await response.json();
-    if (!plainRecord(payload) || !plainRecord(payload.error)) return undefined;
-    const candidate = payload.error.code;
-    const normalized = typeof candidate === "string" || typeof candidate === "number"
-      ? String(candidate)
-      : "";
-    return /^[A-Za-z0-9._-]{1,64}$/.test(normalized) ? normalized : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function errorForHTTPResponse(response: Response): Promise<SafeTaskError> {
-  const providerErrorCode = await safeProviderErrorCode(response);
+async function errorForHTTPResponse(response: Response, apiKey: string): Promise<SafeTaskError> {
+  const { providerErrorCode } = await fixedProviderHTTPDiagnostic(response, [apiKey]);
   const details = {
     ...UPSTREAM_HTTP_FAILURE_OBSERVATION,
     httpStatus: response.status,
@@ -324,7 +311,7 @@ export function createDeepSeekTextTaskExecutor(fetcher: typeof fetch = fetch): A
       clearTimeout(timeout);
     }
 
-    if (!response.ok) throw await errorForHTTPResponse(response);
+    if (!response.ok) throw await errorForHTTPResponse(response, context.apiKey);
 
     let payload: unknown;
     try {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { listAIProviderConnections } from "../../lib/ai/client";
 import { AI_PROVIDER_DEFINITIONS } from "../../lib/ai/providers";
@@ -19,13 +19,27 @@ type AITaskProviderSelectorProps = {
   selectedProvider: AIProviderId | null;
 };
 
-export default function AITaskProviderSelector({
+export default function AITaskProviderSelector(props: AITaskProviderSelectorProps) {
+  const { user, loading: authLoading } = useAuth();
+  const userId = authLoading ? null : user?.id ?? null;
+  return <AccountTaskProviderSelector key={authLoading ? "checking" : userId ?? "anonymous"} {...props} userId={userId} authLoading={authLoading} />;
+}
+
+function AccountTaskProviderSelector({
   capability = "TEXT_REASONING",
   disabled = false,
   onSelect,
-  selectedProvider,
-}: AITaskProviderSelectorProps) {
-  const { user, loading: authLoading } = useAuth();
+  selectedProvider, userId, authLoading,
+}: AITaskProviderSelectorProps & { userId: string | null; authLoading: boolean }) {
+  const active = useRef(false);
+  const version = useRef(0);
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => {
+    active.current = true;
+    const controller = new AbortController();
+    lifetime.current = controller;
+    return () => { active.current = false; version.current += 1; controller.abort(); };
+  }, []);
   const [connections, setConnections] = useState<AIProviderConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,11 +49,15 @@ export default function AITaskProviderSelector({
   );
 
   const loadConnections = useCallback(async () => {
-    if (!user) return;
+    if (!userId || !active.current) return;
+    const request = ++version.current;
+    const current = () => active.current && request === version.current;
     setLoading(true);
     setError(null);
     try {
-      const nextConnections = await listAIProviderConnections();
+      const rows = await listAIProviderConnections(lifetime.current?.signal);
+      if (!current()) return;
+      const nextConnections = rows.filter((row) => row.user_id === userId);
       setConnections(nextConnections);
       const connectedIds = new Set(
         nextConnections
@@ -48,24 +66,25 @@ export default function AITaskProviderSelector({
       );
       onSelect(selectableProviders.find((provider) => connectedIds.has(provider.id))?.id ?? null);
     } catch (nextError) {
+      if (!current()) return;
       setConnections([]);
       onSelect(null);
       setError(safeAIProviderErrorMessage(nextError));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [onSelect, selectableProviders, user]);
+  }, [onSelect, selectableProviders, userId]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!userId) {
       setConnections([]);
       setError(null);
       onSelect(null);
       return;
     }
     void loadConnections();
-  }, [authLoading, loadConnections, onSelect, user]);
+  }, [authLoading, loadConnections, onSelect, userId]);
 
   const connectionsByProvider = useMemo(
     () => new Map(connections.map((connection) => [connection.provider, connection])),
@@ -107,10 +126,10 @@ export default function AITaskProviderSelector({
       })}
     </div>
 
-    {!authLoading && !user && <p className="ai-task-provider-auth-required">
+    {!authLoading && !userId && <p className="ai-task-provider-auth-required">
       登录后使用您连接的 AI 服务。<Link href="/auth">登录 / 注册</Link>
     </p>}
-    {!authLoading && user && !loading && connectedCount === 0 && <p className="ai-task-provider-empty">
+    {!authLoading && userId && !loading && connectedCount === 0 && <p className="ai-task-provider-empty">
       请先连接 AI 服务。
     </p>}
     {error && <p className="ai-task-provider-error" role="alert">

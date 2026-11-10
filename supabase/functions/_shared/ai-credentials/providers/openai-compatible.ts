@@ -34,53 +34,16 @@ function statusForHTTP(responseStatus: number): ProviderValidationStatus {
   return "PROVIDER_UNAVAILABLE";
 }
 
-const SAFE_PROVIDER_ERROR_CODE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const MAX_SANITIZED_PROVIDER_MESSAGE_LENGTH = 160;
-
-function sanitizeProviderErrorMessage(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return undefined;
-
-  const redacted = normalized
-    .replace(/https?:\/\/\S+/gi, "[url]")
-    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
-    .replace(/\b(?:sk|ark)-[A-Za-z0-9._-]{8,}\b/gi, "[redacted]")
-    .replace(/\bAIza[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
-    .replace(/\beyJ[A-Za-z0-9._-]{12,}\b/g, "[redacted]")
-    .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[redacted]")
-    .replace(
-      /\b(authorization|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret|ciphertext|encryption[_ -]?key)\s*[:=]\s*\S+/gi,
-      "$1=[redacted]",
-    );
-
-  return redacted.slice(0, MAX_SANITIZED_PROVIDER_MESSAGE_LENGTH);
-}
-
-async function diagnosticForUpstreamFailure(
-  response: Response,
-): Promise<ProviderValidationDiagnostic> {
-  const diagnostic: ProviderValidationDiagnostic = {
+// Upstream bodies, messages and arbitrary error codes are untrusted. They can
+// echo a submitted or decrypted key, including nested or encoded values.
+// Return only a finite local classification and HTTP status; never copy text.
+function diagnosticForUpstreamFailure(response: Response): ProviderValidationDiagnostic {
+  const status = statusForHTTP(response.status);
+  return {
     upstreamHttpStatus: response.status,
+    upstreamProviderErrorCode: status,
+    sanitizedProviderErrorMessage: messageFor(status),
   };
-  try {
-    const payload = await response.clone().json() as unknown;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return diagnostic;
-    const error = (payload as Record<string, unknown>).error;
-    if (!error || typeof error !== "object" || Array.isArray(error)) return diagnostic;
-    const errorRecord = error as Record<string, unknown>;
-    if (typeof errorRecord.code === "string" && SAFE_PROVIDER_ERROR_CODE.test(errorRecord.code)) {
-      diagnostic.upstreamProviderErrorCode = errorRecord.code;
-    }
-    const safeMessage = sanitizeProviderErrorMessage(errorRecord.message);
-    if (safeMessage) diagnostic.sanitizedProviderErrorMessage = safeMessage;
-  } catch {
-    // Provider bodies are untrusted and optional; never expose the raw response.
-  }
-  return diagnostic;
 }
 
 export function validationResult(

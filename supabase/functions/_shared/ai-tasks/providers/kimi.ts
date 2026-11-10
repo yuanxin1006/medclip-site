@@ -1,6 +1,6 @@
+import { fixedProviderHTTPDiagnostic } from "../provider-http-diagnostic.ts";
 import {
   SafeTaskError,
-  sanitizeTaskProviderErrorMessage,
   type AITaskStatus,
   type SafeTaskDiagnostic,
   type SafeTaskFailureStage,
@@ -171,39 +171,6 @@ function normalizeUsage(value: unknown): SafeTaskUsage | null {
   };
 }
 
-type SafeProviderError = {
-  providerErrorCode?: string;
-  sanitizedProviderErrorMessage?: string;
-};
-
-async function safeProviderError(
-  response: Response,
-  sensitiveValues: readonly string[],
-): Promise<SafeProviderError> {
-  try {
-    const payload: unknown = await response.json();
-    if (!plainRecord(payload) || !plainRecord(payload.error)) return {};
-    const codeCandidate = payload.error.code;
-    const normalizedCode = typeof codeCandidate === "string" || typeof codeCandidate === "number"
-      ? String(codeCandidate)
-      : "";
-    const providerErrorCode = /^[A-Za-z0-9._-]{1,64}$/.test(normalizedCode)
-      ? normalizedCode
-      : undefined;
-    const messageCandidate = payload.error.message;
-    const sanitizedProviderErrorMessage = typeof messageCandidate === "string"
-      && !/\b(messages|creativeRequirement|editingRequirement|subtitleText|assetDescriptions)\b/i.test(messageCandidate)
-      ? sanitizeTaskProviderErrorMessage(messageCandidate, sensitiveValues)
-      : undefined;
-    return {
-      ...(providerErrorCode ? { providerErrorCode } : {}),
-      ...(sanitizedProviderErrorMessage ? { sanitizedProviderErrorMessage } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
-
 async function errorForHTTPResponse(
   response: Response,
   context: AITaskExecutionContext,
@@ -211,7 +178,7 @@ async function errorForHTTPResponse(
   const businessInputValues = Object.values(context.input).flatMap((value) =>
     typeof value === "string" ? [value] : [...value]
   );
-  const safeUpstream = await safeProviderError(response, [context.apiKey, ...businessInputValues]);
+  const safeUpstream = await fixedProviderHTTPDiagnostic(response, [context.apiKey, ...businessInputValues]);
   const details = { ...UPSTREAM_HTTP_FAILURE_OBSERVATION, httpStatus: response.status, ...safeUpstream };
   const diagnosticText = `${safeUpstream.providerErrorCode ?? ""} ${safeUpstream.sanitizedProviderErrorMessage ?? ""}`.toLowerCase();
   if (response.status === 402 || /quota|balance|billing|payment|insufficient/.test(diagnosticText)) {

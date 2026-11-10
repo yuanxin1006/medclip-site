@@ -160,9 +160,9 @@ test("the homepage preserves the primary module order", () => {
 });
 
 test("authenticated connection metadata is loaded through the Edge Function list contract", () => {
-  assert.match(pageSource, /listAIProviderConnections\(\)/);
+  assert.match(pageSource, /listAIProviderConnections\(lifetime\.current\?\.signal\)/);
   assert.match(pageSource, /AI_PROVIDER_DEFINITIONS\.map/);
-  assert.match(clientSource, /invokeCredentialFunction\(\{ action: "list" \}\)/);
+  assert.match(clientSource, /invokeCredentialFunction\(\{ action: "list" \}, signal\)/);
 });
 
 test("an unconnected provider uses an empty password input with autocomplete disabled", () => {
@@ -223,7 +223,7 @@ test("delete requires an explicit confirmation dialog", () => {
 });
 
 test("delete affects only the selected provider", () => {
-  assert.match(pageSource, /deleteAIProviderCredential\(provider\.id\)/);
+  assert.match(pageSource, /deleteAIProviderCredential\(provider\.id, lifetime\.current\?\.signal\)/);
   assert.match(pageSource, /item\.provider !== provider\.id/);
   assert.doesNotMatch(pageSource, /deleteAll|全部删除|删除全部/);
 });

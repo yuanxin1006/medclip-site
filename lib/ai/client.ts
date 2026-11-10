@@ -10,6 +10,7 @@ import { safeAIProviderErrorMessage } from "./ui";
 
 type ProviderConfiguration = {
   providerResourceId?: string;
+  signal?: AbortSignal;
 };
 
 export class AIProviderClientError extends Error {
@@ -34,8 +35,8 @@ function requireResult(data: unknown, invokeError: unknown): AIProviderActionRes
   return result;
 }
 
-async function invokeCredentialFunction(body: Record<string, unknown>): Promise<AIProviderActionResult> {
-  const { data, error } = await getSupabaseBrowserClient().functions.invoke("ai-credentials", { body });
+async function invokeCredentialFunction(body: Record<string, unknown>, signal?: AbortSignal): Promise<AIProviderActionResult> {
+  const { data, error } = await getSupabaseBrowserClient().functions.invoke("ai-credentials", { body, signal });
   let safeData: unknown = data;
   if (!safeData && error instanceof FunctionsHttpError && error.context instanceof Response) {
     try {
@@ -55,8 +56,8 @@ async function invokeCredentialFunction(body: Record<string, unknown>): Promise<
   return requireResult(safeData, safeData ? null : error);
 }
 
-export async function listAIProviderConnections(): Promise<AIProviderConnection[]> {
-  const result = await invokeCredentialFunction({ action: "list" });
+export async function listAIProviderConnections(signal?: AbortSignal): Promise<AIProviderConnection[]> {
+  const result = await invokeCredentialFunction({ action: "list" }, signal);
   return result.connections ?? [];
 }
 
@@ -71,13 +72,13 @@ export async function testTransientCredential(
     provider,
     apiKey,
     providerResourceId: configuration.providerResourceId,
-  });
+  }, configuration.signal);
   if (!result.validation) throw new AIProviderClientError("INTERNAL_ERROR", "连接测试没有返回结果。");
   return result.validation;
 }
 
-export async function testSavedCredential(provider: AIProviderId): Promise<CredentialValidationResult> {
-  const result = await invokeCredentialFunction({ action: "test", mode: "saved", provider });
+export async function testSavedCredential(provider: AIProviderId, signal?: AbortSignal): Promise<CredentialValidationResult> {
+  const result = await invokeCredentialFunction({ action: "test", mode: "saved", provider }, signal);
   if (!result.validation) throw new AIProviderClientError("INTERNAL_ERROR", "连接测试没有返回结果。");
   return result.validation;
 }
@@ -93,7 +94,7 @@ async function persistCredential(
     provider,
     apiKey,
     providerResourceId: configuration.providerResourceId,
-  });
+  }, configuration.signal);
   if (!result.connection) throw new AIProviderClientError("INTERNAL_ERROR", "凭证已处理，但连接状态未能读取。");
   return result.connection;
 }
@@ -114,6 +115,6 @@ export function updateAIProviderCredential(
   return persistCredential("update", provider, apiKey, configuration);
 }
 
-export async function deleteAIProviderCredential(provider: AIProviderId): Promise<void> {
-  await invokeCredentialFunction({ action: "delete", provider });
+export async function deleteAIProviderCredential(provider: AIProviderId, signal?: AbortSignal): Promise<void> {
+  await invokeCredentialFunction({ action: "delete", provider }, signal);
 }
