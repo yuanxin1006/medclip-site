@@ -1,0 +1,11 @@
+.medclip-app .auth-page { place-items:start center; }
+.medclip-app .auth-page .auth-card { width:min(100%,480px); background:var(--mc-surface); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); box-shadow:none; padding:36px; }
+.medclip-app .auth-page .auth-intro { color:var(--mc-muted); font-size:var(--mc-body); }
+.medclip-app .auth-page .auth-mode-switch { margin-top:24px; background:var(--mc-secondary); border-radius:var(--mc-radius-md); padding:4px; }
+.medclip-app .auth-page .auth-mode-switch button { font-size:var(--mc-control); color:var(--mc-muted); border-radius:var(--mc-radius-sm); }
+.medclip-app .auth-page .auth-mode-switch button.is-active { background:var(--mc-surface); color:var(--mc-text); box-shadow:none; }
+.medclip-app .auth-page .auth-footnote { color:var(--mc-muted); font-size:var(--mc-caption); }
+.medclip-app .auth-page .auth-footnote button,.medclip-app .auth-page .auth-confirmation > a { color:var(--lime-11); }
+.medclip-app .auth-page .auth-success-mark { background:var(--mc-success-bg); color:var(--mc-success); }
+.medclip-app .auth-page .auth-confirmation p:not(.platform-kicker) { color:var(--mc-muted); font-size:var(--mc-body); }
+@media(max-width:600px) { .medclip-app .auth-page .auth-card { padding:24px; } }

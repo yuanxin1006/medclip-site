@@ -1,0 +1,34 @@
+.medclip-app .ai-services-page .ai-provider-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.medclip-app .ai-services-page .ai-provider-card { min-width:0; padding:28px; border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); background:var(--mc-surface); box-shadow:none; }
+.medclip-app .ai-services-page .ai-provider-card h2 { color:var(--mc-text); font-size:24px; font-weight:600; }
+.medclip-app .ai-services-page .ai-provider-card p { color:var(--mc-muted); font-size:var(--mc-control); line-height:1.7; }
+.medclip-app .ai-services-page .ai-provider-card-heading { gap:20px; align-items:flex-start; }
+.medclip-app .ai-services-page .ai-provider-card-heading p { margin-bottom:0; }
+.medclip-app .ai-services-page .ai-provider-region { background:var(--olive-3); color:var(--olive-11); font-size:var(--mc-caption); }
+.medclip-app .ai-services-page .ai-provider-status { flex-shrink:0; background:var(--mc-secondary); color:var(--mc-muted); font-size:var(--mc-caption); }
+.medclip-app .ai-services-page .ai-provider-status.is-connected { background:var(--mc-success-bg); color:var(--mc-success); }
+.medclip-app .ai-services-page .ai-provider-status.is-error { background:var(--mc-error-bg); color:var(--mc-destructive); }
+.medclip-app .ai-services-page .ai-provider-status.is-validation_failed { background:var(--mc-error-bg); color:var(--mc-destructive); }
+.medclip-app .ai-services-page .ai-provider-status.is-needs_update { background:var(--mc-warning-bg); color:var(--mc-warning); }
+.medclip-app .ai-services-page .ai-provider-card .ai-provider-notice.is-error { color:var(--mc-destructive); }
+.medclip-app .ai-services-page .ai-provider-card .ai-provider-notice.is-success { color:var(--mc-success); }
+.medclip-app .ai-services-page .ai-services-cost-notice { background:var(--mc-secondary); border:0; border-radius:var(--mc-radius-md); color:var(--mc-text); padding:20px 24px; margin-bottom:16px; }
+.medclip-app .ai-services-page .ai-services-cost-notice strong { color:var(--mc-text); font-size:var(--mc-control); }
+.medclip-app .ai-services-page .ai-services-cost-notice p { color:var(--mc-muted); font-size:var(--mc-control); margin:6px 0 0; }
+.medclip-app .ai-services-page .ai-services-security-note { display:flex; flex-wrap:wrap; gap:8px 16px; background:transparent; border:0; color:var(--mc-muted); padding:0 0 28px; font-size:var(--mc-caption); }
+.medclip-app .ai-services-page .ai-services-security-note strong { color:var(--mc-text); }
+.medclip-app .ai-services-page .ai-provider-form { border-top:var(--mc-hairline) solid var(--mc-border); padding-top:24px; }
+.medclip-app .ai-services-page .ai-provider-form small { font-size:var(--mc-caption); line-height:1.7; }
+.medclip-app .ai-services-page .ai-secret-input { display:flex; align-items:stretch; gap:8px; }
+.medclip-app .ai-services-page .ai-secret-input input { min-width:0; }
+.medclip-app .ai-services-page .ai-secret-input button { flex-shrink:0; min-width:56px; white-space:nowrap; border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-sm); background:var(--mc-secondary); color:var(--mc-text); font-size:var(--mc-control); }
+.medclip-app .ai-services-page .platform-status-pill { background:var(--mc-secondary); color:var(--mc-muted); }
+.medclip-app .ai-services-page .ai-provider-metadata { background:var(--mc-secondary); border-color:var(--mc-border); border-radius:var(--mc-radius-md); }
+.medclip-app .ai-services-page .ai-provider-metadata span { color:var(--mc-muted); font-size:var(--mc-caption); }
+.medclip-app .ai-services-page .ai-provider-metadata strong { color:var(--mc-text); font-size:var(--mc-control); }
+.medclip-app .ai-services-page .ai-provider-actions { gap:10px; }
+.medclip-app .ai-services-page .ai-provider-delete { min-height:44px; border:var(--mc-hairline) solid var(--red-7); border-radius:var(--mc-radius-md); padding:10px 14px; font-size:var(--mc-control); }
+.medclip-app .ai-services-page .ai-services-loading { color:var(--mc-muted); font-size:var(--mc-control); }
+.medclip-app .ai-services-page .ai-provider-updated { color:var(--mc-muted); font-size:var(--mc-caption); }
+@media(max-width:900px) { .medclip-app .ai-services-page .ai-provider-grid { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:600px) { .medclip-app .ai-services-page .ai-provider-card { padding:20px; } .medclip-app .ai-services-page .ai-provider-card-heading { flex-direction:column; gap:12px; } }

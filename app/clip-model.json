@@ -1,0 +1,8 @@
+{
+  "id": "Xenova/clip-vit-base-patch32",
+  "revision": "6b7c523703ae26e39be4b03774966f8571c7f523",
+  "onnxSha256": "0898a3facfdb27f0a041e57649b4989cfd094e4a0040d6ae75ed69917dfc7328",
+  "dtype": "q8",
+  "runtime": "@huggingface/transformers@3.8.1",
+  "labelSetVersion": "medical-contrast-v1"
+}

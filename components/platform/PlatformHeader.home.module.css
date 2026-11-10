@@ -1,0 +1,33 @@
+:global(.platform-header).homeHeader {
+  --home-header-bg:var(--mc-page); --home-header-ink:var(--mc-text); --home-header-line:var(--mc-border);
+  background:var(--mc-page); border-bottom-color:var(--home-header-line); backdrop-filter:blur(10px);
+}
+.homeHeader .homeHeaderInner { position:relative; min-height:64px; max-width:1360px; padding-right:clamp(22px,4.5vw,66px); padding-left:clamp(22px,4.5vw,66px); flex-wrap:nowrap; }
+.homeHeader .homeBrand { flex:0 0 auto; white-space:nowrap; color:var(--home-header-ink); font-size:16px; letter-spacing:-.03em; }
+.homeHeader .homeBrandMark { width:30px; height:30px; border-radius:10px 10px 10px 3px; background:var(--home-header-ink); color:var(--lime-5); font-family:Georgia,"Songti SC","SimSun",serif; font-size:14px; }
+.homeHeader .homeNav { flex:0 1 auto; flex-wrap:nowrap; gap:6px; white-space:nowrap; }
+.homeHeader .homeNav :global(a) { flex:0 0 auto; white-space:nowrap; border-radius:10px; padding:8px 12px; color:var(--sand-11); font-size:var(--mc-control); font-weight:650; transition:background-color var(--mc-duration) var(--mc-ease),color var(--mc-duration) var(--mc-ease); }
+.homeHeader .homeNav :global(a:hover),.homeHeader .homeNav :global(a.is-active) { background:var(--lime-3); color:var(--sand-12); }
+.homeHeader .homeNav :global(.platform-auth-controls) { flex:0 0 auto; flex-wrap:nowrap; white-space:nowrap; gap:8px; margin-left:9px; border-left-color:var(--home-header-line); }
+.homeHeader .homeNav :global(.platform-auth-controls button) { border:var(--mc-hairline) solid var(--olive-12); border-radius:999px; background:var(--olive-12); padding:9px 14px; color:var(--lime-2); transition:background-color var(--mc-duration) var(--mc-ease),transform var(--mc-duration) var(--mc-ease); }
+.homeHeader .homeNav :global(.platform-auth-controls button:hover:not(:disabled)) { background:var(--lime-12); transform:translateY(-1px); }
+.homeHeader .homeNav :global(.platform-user-name) { color:var(--sand-11); }
+.homeAuthStatus { box-sizing:border-box; width:min(1360px,calc(100% - 48px)); margin:8px auto 0; padding:8px 12px; border:1px solid var(--sand-6); border-radius:10px; background:var(--mc-surface); color:#a24740; font-size:12px; line-height:1.5; }
+.homeHeader .homeMenuToggle { width:42px; height:40px; border-color:var(--sand-6); border-radius:11px; background:var(--sand-1); padding:9px; cursor:pointer; }
+.homeHeader .homeMenuToggle span { height:2px; margin:3px 0; background:var(--olive-12); }
+.homeHeader .homeMenuToggle:focus-visible,.homeHeader .homeNav :global(a:focus-visible),.homeHeader .homeNav :global(button:focus-visible) { outline:3px solid var(--olive-12); outline-offset:3px; }
+@media (max-width:840px) {
+ .homeHeader .homeHeaderInner { min-height:60px; padding-right:22px; padding-left:22px; }
+ .homeHeader .homeMenuToggle { display:block; }
+ .homeHeader .homeNav { position:absolute; top:calc(100% + 1px); right:0; left:0; display:none; flex-direction:column; align-items:stretch; gap:3px; border-bottom:var(--mc-hairline) solid var(--home-header-line); background:var(--home-header-bg); padding:12px 22px 16px; box-shadow:none; }
+ .homeHeader .homeNav:global(.is-open) { display:flex; }
+ .homeHeader .homeNav :global(a) { padding:12px 10px; }
+ .homeHeader .homeNav :global(.platform-auth-controls) { align-items:stretch; flex-direction:column; margin:6px 0 0; padding:12px 0 0; border-top:var(--mc-hairline) solid var(--home-header-line); border-left:0; }
+ .homeHeader .homeNav :global(.platform-user-name) { max-width:none; padding:4px 10px; }
+ .homeHeader .homeNav :global(.platform-auth-controls button) { min-height:42px; padding:10px 14px; }
+ .homeAuthStatus { width:calc(100% - 24px); margin-top:8px; padding:8px 10px; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .homeHeader .homeNav :global(a),.homeHeader .homeNav :global(button) { transition-duration:.01ms; }
+ .homeHeader .homeNav :global(.platform-auth-controls button:hover:not(:disabled)) { transform:none; }
+}

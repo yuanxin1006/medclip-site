@@ -1,0 +1,30 @@
+{
+  "version": "1.65.2",
+  "repository": "https://github.com/Vanilagy/mediabunny",
+  "gitHead": "173f6b70765fa3a6ffc1c82737514416fa559ef5",
+  "license": "MPL-2.0",
+  "npmSource": "https://registry.npmjs.org/mediabunny/-/mediabunny-1.65.2.tgz",
+  "integrity": "sha512-goZpibvo/5hkc/56WVNm93Ini+o7K4y8aXA20c/BN1B+m3L5aHQa8MTvO+S1APg/YI8kMILtrX6QCqUtxLW7bA==",
+  "sourceArchiveContainsOriginalTypescript": true,
+  "files": [
+    {
+      "file": "mediabunny-1.65.2.mjs",
+      "sha256": "08149edcc8cf980da65d94a0a54a8fc0fa85a65f89b66f55c906f33618363919",
+      "bytes": 723375
+    },
+    {
+      "file": "mediabunny-1.65.2-source.tgz",
+      "sha256": "93bceb27fd807e06e8b6a0e9e02350bf69e1d70da12d685dd0b133b54c3b1ff6",
+      "bytes": 2302954
+    },
+    {
+      "file": "Mediabunny-MPL-2.0.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "bytes": 16726
+    }
+  ],
+  "declaration": {
+    "file": "app/vendor/mediabunny.d.ts",
+    "sha256": "1dc12ae9f23d230694e3ca3ea352936ffeeee1e6cdbe77cb99c7d7d3ae93188d"
+  }
+}

@@ -1,5 +1,10 @@
 [build]
-  publish = "public"
+  command = "pnpm exec next build --webpack"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "24"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
 
 [[headers]]
   for = "/_next/static/*"
@@ -12,3 +17,4 @@
   [headers.values]
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"
+
