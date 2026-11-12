@@ -1,0 +1,301 @@
+/* Appearance only: track, clip, ruler and handle geometry stays in its owner.
+   Ordinary workspace controls may reflow to keep their text readable. */
+.scope { display:contents; }
+/* Preserve the measured pre-V2.3 empty pane height on stacked workspaces.
+   Removing redundant help must not move the timeline below the properties pane. */
+.scope :global(.editor-empty-properties) { min-block-size:201.4px; box-sizing:border-box; }
+.scope :global(.editor-empty-properties b) { font-size:var(--mc-caption); }
+.scope :global(.editor-studio.editor-active) { overflow:visible; min-height:calc(100dvh - var(--editor-nav-height,77px)); }
+.scope :global(.editor-studio.editor-active > .hero),.scope :global(.editor-studio.editor-active > .workspace),.scope :global(.editor-studio.editor-active > .result-section) { display:none; }
+.scope :global(.editor-studio.editor-active > .timeline-editor-shell) { overflow:visible; isolation:isolate; margin-top:0; margin-bottom:0; }
+.scope :global(.editor-studio.editor-active .timeline-editor-header) { position:sticky; top:var(--editor-nav-height,77px); z-index:1; }
+.scope :global(.editor-studio.editor-active .timeline-editor-main),.scope :global(.editor-studio.editor-active .timeline-dock) { isolation:isolate; }
+@media(max-width:840px) {
+ /* Only the active editor needs its open mobile navigation in normal flow. */
+ :global(body):has(.scope :global(.editor-active)) :global(.platform-header-inner) { flex-wrap:wrap; row-gap:0; }
+ :global(body):has(.scope :global(.editor-active)) :global(.platform-nav.is-open) { position:static; flex-basis:100%; width:100%; }
+}
+.scope :global(.editor-studio) {
+ --editor-surface:var(--mc-surface); --editor-canvas:var(--mc-page); --editor-wash:var(--mc-secondary);
+ --editor-border:var(--mc-border); --editor-ink:var(--mc-text); --editor-muted:var(--mc-muted);
+ --editor-teal:var(--lime-11); --editor-teal-hover:var(--lime-12);
+ --editor-success:var(--mc-success); --editor-warning:var(--mc-warning); --editor-danger:var(--mc-destructive);
+ --ink:var(--mc-text); --muted:var(--mc-muted); --teal:var(--lime-11); --teal-deep:var(--lime-12);
+ --teal-soft:var(--mc-selected); --line:var(--mc-border); --surface:var(--mc-surface); --wash:var(--mc-page); --navy:var(--mc-text);
+}
+.scope :global(.editor-studio > .workspace button) { background-color:var(--mc-surface); color:var(--mc-text); border-color:var(--mc-control-border); box-shadow:none; }
+.scope :global(.editor-studio > .workspace button.selected) { background-color:var(--mc-selected); color:var(--lime-12); border-color:var(--lime-8); }
+.scope :global(.editor-studio .generate-button) { background:var(--mc-primary); color:var(--mc-on-primary); }
+.scope :global(.editor-studio .field),.scope :global(.editor-studio .recognition-card),.scope :global(.editor-studio .semantic-match-card),.scope :global(.editor-studio .audio-card) { background-color:var(--mc-surface); border-color:var(--mc-border); }
+.scope :global(.editor-studio .segmented) { background-color:var(--mc-secondary); }
+.scope :global(.editor-studio button:focus-visible),.scope :global(.editor-studio a:focus-visible),.scope :global(.editor-studio summary:focus-visible) { outline-color:var(--mc-focus); }
+.scope :global(.editor-studio .hero .quiet-button) { color:var(--mc-text); background:var(--mc-surface); border-color:var(--mc-control-border); box-shadow:none; }
+.scope :global(.editor-studio .ai-task-provider-options button.is-selected) { background:var(--mc-selected); border-color:var(--lime-8); box-shadow:none; }
+.scope :global(.editor-studio .step-number),.scope :global(.editor-studio .count-chip) { background:var(--mc-selected); color:var(--lime-12); }
+.scope :global(.editor-studio .toast) { color:var(--lime-11); border-color:var(--mc-border); background:var(--mc-elevated); }
+.scope :global(.timeline-editor-shell) {
+ /* Radix Sand Dark; separate from the light page, with the same lime action. */
+ --mc-page:var(--sand-dark-1); --mc-surface:var(--sand-dark-2); --mc-elevated:var(--sand-dark-3);
+ --mc-text:var(--sand-dark-12); --mc-muted:var(--sand-dark-11); --mc-border:var(--sand-dark-6); --mc-control-border:var(--sand-dark-7);
+ --mc-secondary:var(--sand-dark-3); --mc-focus:var(--lime-9);
+ color:var(--mc-text); background:var(--mc-page); border-color:var(--mc-border); box-shadow:none;
+}
+.scope :global(.timeline-editor-header) { background:var(--mc-surface); border-color:var(--mc-border); color:var(--mc-text); }
+.scope :global(.timeline-editor-header b),.scope :global(.editor-pane-title b) { color:var(--mc-text); }
+.scope :global(.timeline-editor-header small),.scope :global(.editor-pane-title span) { color:var(--mc-muted); }
+.scope :global(.timeline-editor-main),.scope :global(.editor-preview-column) { background:var(--mc-page); }
+.scope :global(.editor-library),.scope :global(.editor-properties),.scope :global(.timeline-dock),.scope :global(.timeline-labels),.scope :global(.timeline-ruler),.scope :global(.timeline-track) { background:var(--mc-surface); border-color:var(--mc-border); }
+.scope :global(.timeline-tools) { background:var(--mc-surface); border-color:var(--mc-border); color:var(--mc-text); }
+.scope :global(.timeline-track),.scope :global(.timeline-ruler) { color:var(--mc-muted); }
+.scope :global(.editor-toolbar button),.scope :global(.timeline-tools button),.scope :global(.editor-library button),.scope :global(.editor-properties button) { background:var(--mc-secondary); border-color:var(--mc-control-border); color:var(--mc-text); box-shadow:none; }
+.scope :global(.editor-toolbar .render-button) { background:var(--mc-primary); color:var(--mc-on-primary); border-color:var(--mc-primary); }
+.scope :global(.editor-toolbar .danger) { color:var(--red-7); }
+.scope :global(.editor-toolbar button:hover:not(:disabled)),.scope :global(.timeline-tools button:hover:not(:disabled)) { background:var(--mc-control-border); }
+.scope :global(.timeline-tools button.selected) { color:var(--mc-primary); border-color:var(--mc-primary); }
+.scope :global(.editor-library select),.scope :global(.editor-properties input),.scope :global(.editor-properties select),.scope :global(.editor-properties textarea) { background:var(--mc-elevated); color:var(--mc-text); border-color:var(--mc-control-border); }
+.scope :global(.editor-empty-properties b),.scope :global(.editor-empty-properties p),.scope :global(.editor-library p),.scope :global(.editor-library small) { color:var(--mc-muted); }
+.scope :global(.timeline-editor-shell button:focus-visible),.scope :global(.timeline-editor-shell input:focus-visible),.scope :global(.timeline-editor-shell select:focus-visible) { outline:2px solid var(--mc-focus); outline-offset:2px; }
+.scope :global(.timeline-editor-shell input[type="range"]) { accent-color:var(--mc-primary); }
+.scope :global(.editor-player-controls button),.scope :global(.editor-status-dot) { background:var(--mc-primary); color:var(--mc-on-primary); }
+.scope :global(.editor-player-controls span),.scope :global(.editor-empty-preview),.scope :global(.editor-preview-meta span),.scope :global(.editor-preview-meta b),.scope :global(.timeline-tools label),.scope :global(.timeline-tools > span) { color:var(--mc-muted); }
+@media(prefers-reduced-motion:reduce) { .scope :global(.editor-studio *) { animation:none!important; transition:none!important; } }
+
+/* V2.1: compact page heading; the workbench and timeline keep their geometry. */
+.scope :global(.editor-studio .editor-hero-copy .eyebrow) { display:none; }
+.scope :global(.editor-studio .hero h1) { font-family:var(--mc-display); font-size:clamp(28px,2.5vw,40px); font-weight:500; line-height:1.2; letter-spacing:-.04em; margin:0; padding:0; }
+.scope :global(.editor-studio .hero) { padding-top:18px; padding-bottom:14px; }
+.scope :global(.editor-studio .editor-hero-copy > div) { gap:6px; }
+
+/* Preserve waveform width/height, border widths and native thumb hit areas.
+   Color carries state alongside the existing handles, time values and messages. */
+.scope :global(.editor-studio .audio-wave-selector) { background:var(--sand-3); border-color:var(--sand-7); }
+.scope :global(.editor-studio .wave-bars i) { background:var(--sand-8); transition:background-color var(--mc-duration) var(--mc-ease); }
+.scope :global(.editor-studio .wave-bars i.selected) { background:var(--lime-11); box-shadow:none; }
+.scope :global(.editor-studio .selected-range-fill) { background:color-mix(in srgb,var(--lime-4) 50%,transparent); border-color:var(--lime-11); }
+.scope :global(.editor-studio .selection-playhead) { background:var(--sand-12); box-shadow:none; }
+.scope :global(.editor-studio .range-handle::-webkit-slider-thumb) { background:var(--sand-1); border-color:var(--lime-11); box-shadow:none; }
+.scope :global(.editor-studio .range-handle::-moz-range-thumb) { background:var(--sand-1); border-color:var(--lime-11); }
+.scope :global(.editor-studio .range-handle:focus-visible) { outline:2px solid var(--mc-focus); outline-offset:2px; }
+.scope :global(.editor-studio .audio-range-summary > div) { background:var(--sand-2); border-color:var(--sand-6); }
+.scope :global(.editor-studio .audio-range-summary span),.scope :global(.editor-studio .audio-time-inputs label span),.scope :global(.editor-studio .audio-selection-heading small) { color:var(--sand-11); font-size:var(--mc-caption); }
+.scope :global(.editor-studio .audio-range-summary b) { color:var(--sand-12); font-size:var(--mc-control); }
+.scope :global(.editor-studio .audio-time-inputs input) { background:var(--sand-1); color:var(--sand-12); border-color:var(--sand-7); font-size:var(--mc-caption); }
+.scope :global(.editor-studio .audio-time-inputs input:focus) { border-color:var(--lime-11); box-shadow:none; outline:2px solid var(--mc-focus); outline-offset:2px; }
+.scope :global(.editor-studio .audio-time-inputs input[aria-invalid="true"]) { border-color:var(--red-9); }
+.scope :global(.editor-studio .audio-selection-error) { color:var(--red-11); background:var(--red-3); border-color:var(--red-7); font-size:var(--mc-caption); }
+.scope :global(.editor-studio .audio-selection-heading > span) { background:var(--sand-3); color:var(--sand-12); font-size:var(--mc-caption); }
+.scope :global(.editor-studio .audio-selection-actions button) { font-size:var(--mc-caption); border-radius:var(--mc-radius-sm); }
+.scope :global(.editor-studio .audio-selection-mode button),.scope :global(.editor-studio .audio-selection-heading label),.scope :global(.editor-studio .audio-selection-field .duration-link-state b),.scope :global(.editor-studio .audio-selection-field .duration-link-state span),.scope :global(.editor-studio .audio-selection-field .duration-link-state button),.scope :global(.editor-studio .audio-selection-field .mismatch-confirm) { font-size:var(--mc-caption); }
+.scope :global(.editor-studio .audio-selection-field .duration-link-state) { background:var(--sand-2); border-color:var(--sand-6); color:var(--sand-11); }
+.scope :global(.editor-studio .audio-selection-field .duration-link-state.longer),.scope :global(.editor-studio .audio-selection-field .mismatch-confirm) { background:var(--amber-3); border-color:var(--amber-7); color:var(--amber-12); }
+@media(prefers-reduced-motion:reduce) { .scope :global(.editor-studio .wave-bars i) { transition:none; } }
+
+/* Preparation forms are ordinary UI, separate from the measured timeline.
+   Keep their inherited hierarchy while lifting legacy 7–11px labels to 12px. */
+.scope :global(.editor-studio > :is(.hero,.workspace) :is(span,small,b,strong,p,label,button,em,summary)) {
+ font-size:max(var(--mc-caption),1em);
+}
+.scope :global(.editor-studio .audio-upload > div) { min-width:0; }
+.scope :global(.editor-studio .audio-upload > span) { flex-shrink:0; }
+@media(max-width:600px) {
+ .scope :global(.editor-studio .audio-upload) { display:grid; grid-template-columns:40px minmax(0,1fr); gap:8px 12px; }
+ .scope :global(.editor-studio .audio-upload > span:first-child) { grid-row:1 / span 2; margin-right:0; }
+ .scope :global(.editor-studio .audio-upload .select-file) { grid-column:2; }
+}
+
+/* V2.3A: readable workspace controls. Track graphics and preview content keep
+   their own typography and dimensions; no timeline geometry rules are changed. */
+.scope :global(.timeline-editor-header small),
+.scope :global(.editor-toolbar button:not(.close-editor)),
+.scope :global(.editor-library :is(b,strong,span,small,p,button,input,select,textarea)),
+.scope :global(.editor-properties :is(b,strong,span,small,p,label,button,input,select,textarea)),
+.scope :global(.editor-preview-meta :is(b,span)),
+.scope :global(.editor-empty-preview b),
+.scope :global(.editor-player-controls span),
+.scope :global(.timeline-tools :is(b,span,label,button)),
+.scope :global(.timeline-labels > div),
+.scope :global(.caption-review-warning),
+.scope :global(.overlay-empty-warning),
+.scope :global(.toast) { font-size:var(--mc-caption); }
+.scope :global(.editor-player-controls) { grid-template-columns:34px minmax(0,1fr) auto; }
+.scope :global(.editor-library :is(small,p,.editor-draft-note span)),
+.scope :global(.editor-properties :is(small,p,.caption-review-warning,.overlay-empty-warning)) { line-height:1.5; overflow-wrap:anywhere; }
+.scope :global(.speed-point-list > div) { grid-template-columns:32px minmax(0,1fr) minmax(0,1.2fr) 42px 24px; }
+.scope :global(.speed-point-list input) { min-width:0; }
+.scope :global(.editor-empty-properties > span) { font-size:34px; }
+.scope :global(.speed-point-list button) { font-size:13px; }
+.scope :global(.requirement-dialog .dialog-heading :is(p,.eyebrow)),
+.scope :global(.requirement-dialog .material-index :is(b,span,small,i)),
+.scope :global(.requirement-dialog .requirement-editor > label),
+.scope :global(.requirement-dialog .requirement-editor textarea),
+.scope :global(.requirement-dialog .example-requirements :is(span,button)),
+.scope :global(.requirement-dialog .dialog-actions button),
+.scope :global(.editor-ai-dialog-hint),
+.scope :global(.editor-ai-dialog-error),
+.scope :global(.editor-ai-apply-summary) { font-size:var(--mc-caption); }
+.scope :global(.editor-studio .transcription-context :is(input,textarea)),
+.scope :global(.editor-studio .output-advanced select),
+.scope :global(.editor-studio .player-bar > span) { font-size:var(--mc-caption); }
+@media(max-width:600px) {
+ .scope :global(.editor-toolbar) { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; }
+ .scope :global(.editor-toolbar button:not(.close-editor)) { padding-inline:6px; min-height:32px; white-space:nowrap; }
+ .scope :global(.editor-toolbar .close-editor) { grid-column:4; grid-row:2; justify-self:end; align-self:center; }
+ .scope :global(.editor-player-controls) { gap:6px; }
+ .scope :global(.requirement-dialog .dialog-actions),.scope :global(.requirement-dialog .dialog-actions > div) { flex-wrap:wrap; gap:8px; }
+ .scope :global(.requirement-dialog .dialog-actions > div) { flex-basis:100%; }
+}
+
+/* V2.3B: the full-video action is nested inside output-action-buttons.
+   Keep this softer than the Lime 9 preview/update action. */
+.scope :global(.editor-studio .final-output-card .output-action-buttons > button:not(.continue-edit-button)) {
+ display:inline-flex; align-items:center; justify-content:center;
+ box-sizing:border-box; min-block-size:40px; max-inline-size:100%; padding:9px 12px;
+ background:var(--lime-3); color:var(--mc-text);
+ border:var(--mc-hairline) solid var(--lime-7); border-radius:var(--mc-radius-sm);
+ font-family:var(--mc-font); font-size:var(--mc-control); font-weight:650; line-height:1.4;
+ cursor:pointer; box-shadow:none;
+ transition:background-color var(--mc-duration) var(--mc-ease),border-color var(--mc-duration) var(--mc-ease),color var(--mc-duration) var(--mc-ease);
+}
+.scope :global(.editor-studio .final-output-card .output-action-buttons > button:not(.continue-edit-button):hover:enabled) { background:var(--lime-4); }
+.scope :global(.editor-studio .final-output-card .output-action-buttons > button:not(.continue-edit-button):active:enabled) { background:var(--lime-5); border-color:var(--lime-8); }
+.scope :global(.editor-studio .final-output-card .output-action-buttons > button:not(.continue-edit-button):focus-visible) { outline:2px solid var(--mc-focus); outline-offset:2px; }
+.scope :global(.editor-studio .final-output-card .output-action-buttons > button:not(.continue-edit-button):disabled) { color:var(--mc-muted); border-color:var(--lime-6); cursor:not-allowed; opacity:1; }
+
+.scope :global(.editor-audio-mode) {
+ min-height: 40px;
+ padding: 7px 10px;
+ border: var(--mc-hairline) solid var(--mc-control-border);
+ border-radius: var(--mc-radius-sm);
+ background: var(--mc-elevated);
+ color: var(--mc-text);
+}
+.scope :global(.duration-match-field input[type="range"]) { accent-color: var(--lime-9); }
+
+/* Four non-linear stages. Hidden panels stay mounted to retain files and edits. */
+.scope :global(.editor-flow-stage[hidden]), .scope :global(.editor-ai-tool[hidden]), .scope :global(.timeline-editor-shell[hidden]) { display:none!important; }
+.scope :global(.editor-active > .editor-flow-nav) { display:none; }
+.scope :global(.editor-flow-nav) { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; position:sticky; top:var(--editor-nav-height,77px); z-index:15; padding:10px 0; background:var(--mc-page); }
+.scope :global(.editor-flow-nav button) { min-width:0; display:flex; align-items:center; gap:10px; text-align:left; min-height:72px; padding:12px; border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-md); background:var(--mc-surface); color:var(--mc-text); transition:background-color 150ms var(--mc-ease); }
+.scope :global(.editor-flow-nav button[aria-current="step"]) { background:var(--lime-3); border-color:var(--lime-8); }
+.scope :global(.editor-flow-nav button > span:nth-child(2)) { display:grid; gap:5px; min-width:0; flex:1; }
+.scope :global(.editor-flow-nav b) { font-size:var(--mc-control); font-weight:650; }
+.scope :global(.editor-flow-nav small) { font-size:var(--mc-caption); color:var(--mc-muted); line-height:1.4; overflow-wrap:anywhere; }
+.scope :global(.editor-flow-nav em) { font-size:11px; font-style:normal; color:var(--mc-muted); }
+.scope :global(.flow-stage-index) { font-size:var(--mc-caption); color:var(--lime-11); font-variant-numeric:tabular-nums; }
+.scope :global(.editor-flow-workspace) { display:block; margin-top:18px; width:100%; min-width:0; }
+.scope :global(.editor-flow-stage) { width:100%; min-width:0; scroll-margin-top:170px; }
+.scope :global(.flow-stage-heading) { display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
+.scope :global(.flow-stage-heading > span) { display:grid; place-items:center; min-width:36px; height:36px; border-radius:var(--mc-radius-sm); background:var(--lime-4); color:var(--lime-12); font-size:var(--mc-caption); }
+.scope :global(.flow-stage-heading h2) { margin:0 0 6px; font-size:24px; line-height:1.3; color:var(--mc-text); letter-spacing:-.02em; }
+.scope :global(.flow-stage-heading p) { margin:0; color:var(--mc-muted); font-size:var(--mc-control); line-height:1.6; }
+.scope :global(.flow-card) { display:flex; flex-direction:column; gap:18px; min-width:0; padding:24px; border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); background:var(--mc-surface); }
+.scope :global(.flow-card h3) { font-size:18px; margin:0; color:var(--mc-text); }
+.scope :global(.flow-card .panel-heading) { margin:0; }
+.scope :global(.flow-card .audio-source-field) { margin:0; }
+.scope :global(.editor-flow-workspace .audio-interval-step) { box-shadow:none; border-radius:var(--mc-radius-md); padding:16px; }
+.scope :global(.flow-material-actions), .scope :global(.flow-finish-actions), .scope :global(.flow-request) { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
+.scope :global(.flow-next) { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-top:8px; }
+.scope :global(.editor-studio .editor-flow-workspace button.flow-primary) { background:var(--mc-primary); color:var(--mc-on-primary); border:var(--mc-hairline) solid var(--lime-8); box-shadow:none; border-radius:var(--mc-radius-md); padding:11px 20px; min-height:44px; font-weight:650; }
+.scope :global(.editor-studio .editor-flow-workspace button.flow-primary:hover:not(:disabled)) { background:var(--mc-primary-hover); }
+.scope :global(.editor-studio .editor-flow-workspace button.flow-secondary) { background:var(--mc-secondary); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-md); min-height:42px; padding:10px 16px; }
+.scope :global(.editor-studio .editor-flow-workspace button.flow-link) { background:transparent; color:var(--lime-11); border:0; padding:5px 0; min-height:36px; box-shadow:none; text-decoration:underline; text-underline-offset:4px; }
+.scope :global(.flow-note), .scope :global(.flow-disabled-reason), .scope :global(.flow-request small), .scope :global(.flow-finish-actions small) { margin:0; font-size:var(--mc-caption); line-height:1.65; color:var(--mc-muted); }
+.scope :global(.asset-timeline-state) { color:var(--lime-11); }
+.scope :global(.flow-relink) { background:var(--amber-3); border:var(--mc-hairline) solid var(--amber-7); border-radius:var(--mc-radius-md); padding:16px; }
+.scope :global(.flow-relink p) { font-size:var(--mc-caption); line-height:1.6; margin:8px 0; }
+.scope :global(.flow-relink label) { display:grid; gap:8px; padding:10px 0; overflow-wrap:anywhere; }
+.scope :global(.flow-relink input) { width:100%; min-width:0; }
+.scope :global(.flow-ai-tabs) { display:flex; flex-wrap:wrap; gap:8px; border-bottom:var(--mc-hairline) solid var(--mc-border); padding-bottom:12px; }
+.scope :global(.flow-ai-tabs button) { border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-sm); padding:9px 14px; min-height:40px; }
+.scope :global(.flow-ai-tabs button[aria-selected="true"]) { background:var(--lime-3); border-color:var(--lime-8); color:var(--lime-12); }
+.scope :global(.flow-ai-context), .scope :global(.flow-visual-status) { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:0; padding:12px; background:var(--mc-page); border-radius:var(--mc-radius-sm); color:var(--mc-muted); font-size:var(--mc-control); line-height:1.6; }
+.scope :global(.editor-ai-tool) { min-width:0; display:grid; gap:16px; }
+.scope :global(.flow-request) { width:100%; }
+.scope :global(.flow-request label) { font-weight:650; font-size:var(--mc-control); }
+.scope :global(.flow-request textarea) { width:100%; min-height:112px; resize:vertical; box-sizing:border-box; padding:14px; color:var(--mc-text); background:var(--mc-surface); border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-md); font:inherit; line-height:1.6; }
+.scope :global(.editor-flow-workspace .advanced-settings) { border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-md); padding:12px 16px; background:var(--mc-surface); margin:0; min-width:0; }
+.scope :global(.editor-flow-workspace .advanced-settings > summary) { font-size:var(--mc-control); font-weight:600; cursor:pointer; }
+.scope :global(.editor-flow-workspace .advanced-settings[open] > summary) { margin-bottom:16px; }
+.scope :global(.flow-finish-grid) { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,340px); gap:24px; align-items:start; margin-top:18px; }
+.scope :global(.flow-finish-grid .result-section) { margin:0; width:100%; min-width:0; }
+.scope :global(.flow-finish-grid .result-grid) { display:block; min-width:0; }
+.scope :global(.flow-finish-grid .result-heading) { margin:0 0 12px; }
+.scope :global(.flow-finish-grid .preview-frame) { max-height:640px; width:100%; min-width:0; }
+.scope :global(.flow-output-column) { display:grid; gap:16px; min-width:0; }
+.scope :global(.flow-output-column .flow-card) { padding:18px; }
+.scope :global(.flow-output-column .output-ready-row) { flex-direction:column; align-items:stretch; }
+.scope :global(.flow-output-column .output-ready-row button) { width:100%; }
+.scope :global(.editor-flow-workspace .consent) { margin:0; padding-top:4px; }
+.scope :global(.editor-flow-workspace select), .scope :global(.editor-flow-workspace textarea) { max-width:100%; min-width:0; }
+.scope :global(.editor-mobile-tabs) { display:none; }
+.scope :global(.timeline-editor-main), .scope :global(.timeline-dock), .scope :global(.timeline-scroll), .scope :global(.editor-preview-column) { min-width:0; }
+@media(max-width:1100px) {
+ .scope :global(.flow-finish-grid) { grid-template-columns:minmax(0,1fr) 300px; gap:16px; }
+ .scope :global(.timeline-editor-main) { grid-template-columns:170px minmax(0,1fr) 245px; }
+}
+@media(max-width:720px) {
+ .scope :global(.editor-flow-nav) { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+ .scope :global(.editor-flow-nav button) { min-height:68px; padding:9px; gap:8px; }
+ .scope :global(.editor-flow-nav em) { align-self:flex-start; }
+ .scope :global(.editor-flow-stage) { scroll-margin-top:240px; }
+ .scope :global(.flow-card) { padding:16px; gap:16px; }
+ .scope :global(.flow-stage-heading h2) { font-size:21px; }
+ .scope :global(.flow-finish-grid) { grid-template-columns:minmax(0,1fr); }
+ .scope :global(.flow-next) { align-items:stretch; flex-direction:column; }
+ .scope :global(.flow-next button), .scope :global(.flow-material-actions button.flow-primary), .scope :global(.flow-request button.flow-primary) { width:100%; }
+ .scope :global(.timeline-editor-main) { grid-template-columns:minmax(0,1fr); }
+ .scope :global(.editor-mobile-tabs) { display:flex; padding:8px 12px; gap:8px; background:var(--mc-surface); border-bottom:var(--mc-hairline) solid var(--mc-border); }
+ .scope :global(.editor-mobile-tabs button) { flex:1; min-height:40px; border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-sm); color:var(--mc-text); background:var(--mc-surface); }
+ .scope :global(.editor-mobile-tabs button[aria-pressed="true"]) { background:var(--lime-3); border-color:var(--lime-8); }
+ .scope :global(.timeline-editor-shell:not([data-mobile-pane="library"]) .editor-library), .scope :global(.timeline-editor-shell:not([data-mobile-pane="preview"]) .editor-preview-column), .scope :global(.timeline-editor-shell:not([data-mobile-pane="properties"]) .editor-properties) { display:none; }
+ .scope :global(.editor-properties), .scope :global(.editor-library) { max-height:46dvh; overflow:auto; }
+ .scope :global(.editor-preview-column) { min-height:260px; padding:12px; }
+ .scope :global(.editor-canvas) { max-height:360px; }
+ .scope :global(.timeline-editor-shell) { width:100%; margin-inline:0; }
+ .scope :global(.editor-toolbar) { display:flex; flex-wrap:wrap; gap:6px; }
+ .scope :global(.editor-toolbar button) { min-height:38px; padding:8px 10px; }
+ .scope :global(.timeline-dock) { overflow:hidden; }
+ .scope :global(.timeline-scroll) { overflow-x:auto; max-width:100%; }
+ .scope :global(.timeline-labels) { max-width:72px; }
+ .scope :global(.editor-library .editor-asset-list) { grid-template-columns:1fr; }
+}
+
+.scope :global(.editor-mobile-tabs button[aria-pressed="true"]) {color:var(--lime-12);}
+
+/* Preserve the actual output aspect and shared caption metrics. */
+.scope :global(.flow-finish-grid .preview-frame){max-height:none;}
+.scope :global(.preview-916){width:min(360px,100%)!important;}
+.scope :global(.preview-916 .preview-stage){aspect-ratio:9/16;}
+.scope :global(.preview-11 .preview-stage){aspect-ratio:1;}
+@media(max-width:720px){.scope :global(.editor-canvas.editor-ratio-916){width:min(202.5px,100%);max-height:none;}}
+
+/* V2.4: center the preparation flow while leaving the active editing workbench full width. */
+.scope :global(.editor-studio:not(.editor-active) > .hero) {
+ box-sizing:border-box; width:min(1280px,calc(100% - 48px)); max-width:1280px; margin-inline:auto;
+ padding-top:12px; padding-bottom:8px;
+}
+.scope :global(.editor-studio:not(.editor-active) > .editor-flow-nav) {
+ box-sizing:border-box; width:min(1360px,calc(100% - 48px)); max-width:1360px; margin-inline:auto;
+ gap:8px; padding-block:6px;
+}
+.scope :global(.editor-studio:not(.editor-active) .editor-flow-nav button) {
+ min-height:68px; padding:10px; gap:8px;
+}
+.scope :global(.editor-studio:not(.editor-active) > .workspace) {
+ box-sizing:border-box; width:min(1280px,calc(100% - 48px)); max-width:1280px; margin-inline:auto;
+}
+.scope :global(.editor-studio:not(.editor-active) > .editor-flow-workspace) { margin-top:10px; }
+.scope :global(.editor-studio:not(.editor-active) .flow-stage-heading) { margin-bottom:12px; }
+@media(max-width:600px) {
+ .scope :global(.editor-studio:not(.editor-active) > .hero),
+ .scope :global(.editor-studio:not(.editor-active) > .editor-flow-nav),
+ .scope :global(.editor-studio:not(.editor-active) > .workspace) { width:calc(100% - 24px); }
+ .scope :global(.editor-studio:not(.editor-active) .editor-flow-nav button) { padding:8px; gap:6px; }
+ .scope :global(.editor-studio:not(.editor-active) .flow-stage-heading) { margin-bottom:10px; }
+}
+
+.scope :global(.output-canvas-settings){display:grid;gap:10px;border:1px solid var(--mc-border);border-radius:12px;padding:16px;background:var(--mc-surface);min-width:0;}
+.scope :global(.output-canvas-settings label){display:grid;gap:6px;font-size:13px;}
+.scope :global(.output-canvas-settings select),.scope :global(.output-canvas-settings input){box-sizing:border-box;width:100%;min-width:0;padding:8px;border:1px solid var(--mc-control-border);border-radius:8px;background:var(--mc-surface);color:var(--mc-text);}
+.scope :global(.output-custom-size){display:grid;grid-template-columns:1fr 1fr;gap:8px;}.scope :global(.output-custom-size button){grid-column:1/-1;min-height:36px;}.scope :global(.output-canvas-settings small){font-size:12px;line-height:1.5;overflow-wrap:anywhere;}
+.scope :global(.output-custom-size button){border:1px solid var(--mc-control-border);border-radius:8px;background:var(--lime-3);color:var(--mc-text);padding:8px 12px;font:inherit;cursor:pointer;}.scope :global(.output-custom-size button:disabled){opacity:.6;cursor:default;}

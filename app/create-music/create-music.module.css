@@ -1,0 +1,28 @@
+.page:global(.ai-music-page) :global(.ai-music-layout) { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(320px,.9fr); gap:24px; align-items:start; }
+.page:global(.ai-music-page) :global(.ai-music-form),.page:global(.ai-music-page) :global(.ai-result-panel) { min-width:0; padding:28px; background:var(--mc-surface); border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); box-shadow:none; }
+.page:global(.ai-music-page) :global(.ai-result-panel) { text-align:left; }
+.page:global(.ai-music-page) :global(.ai-task-result-preview) { border:0; background:transparent; padding:0; }
+.page:global(.ai-music-page) :global(h2),.page:global(.ai-music-page) :global(.ai-task-result-preview h3) { margin:0; color:var(--mc-text); font-size:24px; font-family:var(--mc-display); font-weight:500; }
+.page:global(.ai-music-page) :global(.music-choice-row legend) { color:var(--mc-text); font-size:var(--mc-control); }
+.page:global(.ai-music-page) :global(.music-choice-row button) { background:var(--mc-surface); color:var(--mc-muted); border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-sm); padding:10px 14px; font-size:var(--mc-control); }
+.page:global(.ai-music-page) :global(.music-choice-row button.is-selected) { background:var(--mc-selected); color:var(--lime-12); border-color:var(--lime-8); }
+.page:global(.ai-music-page) :global(.platform-file-field) { background:var(--mc-secondary); border-color:var(--mc-border); border-width:var(--mc-hairline); border-radius:var(--mc-radius-md); }
+.page:global(.ai-music-page) :global(.platform-file-field span) { color:var(--mc-muted); font-size:var(--mc-caption); }
+.page:global(.ai-music-page) :global(.ai-task-actions) { gap:10px; border-top:var(--mc-hairline) solid var(--mc-border); padding-top:20px; }
+.page:global(.ai-music-page) :global(.ai-task-result-state),.page:global(.ai-music-page) :global(.ai-task-safety-note) { color:var(--mc-muted); font-size:var(--mc-control); line-height:1.7; }
+.page:global(.ai-music-page) :global(.ai-task-result-data dt),.page:global(.ai-music-page) :global(.async-music-operation-ref),.page:global(.ai-music-page) :global(.async-music-mock-control small),.page:global(.ai-music-page) :global(.async-music-completed > p) { color:var(--mc-muted); font-size:var(--mc-caption); }
+.page:global(.ai-music-page) :global(.ai-task-result-data > div),.page:global(.ai-music-page) :global(.async-music-mock-control) { background:var(--mc-secondary); }
+.page:global(.ai-music-page) :global(.ai-task-result-data dd) { color:var(--mc-text); font-size:var(--mc-body); }
+.page:global(.ai-music-page) :global(.async-music-foundation) { border-top:var(--mc-hairline) solid var(--mc-border); padding-top:24px; }
+.page:global(.ai-music-page) :global(.async-music-stage) { background:var(--mc-secondary); border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-md); }
+.page:global(.ai-music-page) :global(.async-music-stage h2) { font-size:20px; }
+.page:global(.ai-music-page) :global(.async-music-stage p) { color:var(--mc-muted); font-size:var(--mc-control); }
+.page:global(.ai-music-page) :global(.async-music-stage-marker) { border-color:var(--mc-control-border); box-shadow:none; }
+.page:global(.ai-music-page) :global(.async-music-stage.is-success) { background:var(--mc-success-bg); border-color:var(--green-7); }
+.page:global(.ai-music-page) :global(.async-music-stage.is-error) { background:var(--mc-error-bg); border-color:var(--red-7); }
+.page:global(.ai-music-page) :global(.async-music-stage.is-caution) { background:var(--mc-warning-bg); border-color:var(--amber-7); }
+.page:global(.ai-music-page) :global(.async-music-release-note),.page:global(.ai-music-page) :global(.async-music-test-mode-note) { background:var(--mc-warning-bg); color:var(--mc-warning); font-size:var(--mc-caption); }
+.page:global(.ai-music-page) :global(.async-music-error) { font-size:var(--mc-control); }
+.page:global(.ai-music-page) :global(.async-music-completed > a) { color:var(--lime-11); font-size:var(--mc-control); }
+@media(max-width:1000px) { .page:global(.ai-music-page) :global(.ai-music-layout) { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:600px) { .page:global(.ai-music-page) :global(.ai-music-form),.page:global(.ai-music-page) :global(.ai-result-panel) { padding:20px; } }

@@ -1,0 +1,112 @@
+{
+  "model": {
+    "id": "Xenova/clip-vit-base-patch32",
+    "revision": "6b7c523703ae26e39be4b03774966f8571c7f523",
+    "onnxSha256": "0898a3facfdb27f0a041e57649b4989cfd094e4a0040d6ae75ed69917dfc7328",
+    "dtype": "q8",
+    "runtime": "@huggingface/transformers@3.8.1",
+    "labelSetVersion": "medical-contrast-v1"
+  },
+  "files": [
+    {
+      "file": "README.md",
+      "sha256": "ae287015b60eb7ca1d40e726c550af1988977c24f0005f123274d52490c20d8d",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/README.md",
+      "bytes": 1417
+    },
+    {
+      "file": "config.json",
+      "sha256": "493ef57ff783e42d1530c91b53469b7fdf8db8a9c1408e86998fcb7899a4f495",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/config.json",
+      "bytes": 4524
+    },
+    {
+      "file": "preprocessor_config.json",
+      "sha256": "6f638fb9401a6d6296feff533ee7efe657b787c49f954f82f5906b36ef2a1b1f",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/preprocessor_config.json",
+      "bytes": 520
+    },
+    {
+      "file": "tokenizer.json",
+      "sha256": "f7f3b7af117d467b58374797691a6438d3e6b9e9cef800dfd5dced7f697a90cd",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/tokenizer.json",
+      "bytes": 2224119
+    },
+    {
+      "file": "tokenizer_config.json",
+      "sha256": "60ba2912bc6344c94bc16bbdec27fa1209409167b6f2fdf3cfe9e65462ea3967",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/tokenizer_config.json",
+      "bytes": 775
+    },
+    {
+      "file": "special_tokens_map.json",
+      "sha256": "c4864a9376a8401918425bed71fc14fc0e81f9b59ec45c1cf96cccb2df508eac",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/special_tokens_map.json",
+      "bytes": 472
+    },
+    {
+      "file": "vocab.json",
+      "sha256": "5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/vocab.json",
+      "bytes": 862328
+    },
+    {
+      "file": "merges.txt",
+      "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/merges.txt",
+      "bytes": 524619
+    },
+    {
+      "file": "onnx/model_quantized.onnx",
+      "sha256": "0898a3facfdb27f0a041e57649b4989cfd094e4a0040d6ae75ed69917dfc7328",
+      "source": "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/onnx/model_quantized.onnx",
+      "bytes": 153695702
+    }
+  ],
+  "runtime": [
+    {
+      "file": "ort-wasm-simd-threaded.jsep.mjs",
+      "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9",
+      "bytes": 44484
+    },
+    {
+      "file": "ort-wasm-simd-threaded.jsep.wasm",
+      "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39",
+      "bytes": 21596019
+    }
+  ],
+  "notices": [
+    {
+      "file": "ONNX-Runtime-MIT.txt",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    {
+      "file": "ONNX-Runtime-ThirdPartyNotices.txt",
+      "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+    },
+    {
+      "file": "OpenAI-CLIP-MIT.txt",
+      "sha256": "987e63b32f6c89ff5160e429458a872ff048e6860b590a3912e938f9da8f14db"
+    },
+    {
+      "file": "Transformers-js-3.8.1-Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "Xenova-fixed-model-card.md",
+      "sha256": "ae287015b60eb7ca1d40e726c550af1988977c24f0005f123274d52490c20d8d"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "@huggingface/transformers",
+      "version": "3.8.1",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "onnxruntime-web",
+      "version": "1.22.0-dev.20250409-89f8206ba4",
+      "license": "MIT"
+    }
+  ]
+}

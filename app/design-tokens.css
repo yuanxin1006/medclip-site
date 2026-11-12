@@ -1,0 +1,37 @@
+/* Radix Colors official sRGB scales, https://github.com/radix-ui/colors.
+   Steps 1–2: canvas; 3–5: controls; 6–8: borders; 9–10: solid; 11–12: text. */
+:root {
+  --sand-1:#fdfdfc; --sand-2:#f9f9f8; --sand-3:#f1f0ef; --sand-4:#e9e8e6;
+  --sand-5:#e2e1de; --sand-6:#dad9d6; --sand-7:#cfceca; --sand-8:#bcbbb5;
+  --sand-9:#8d8d86; --sand-10:#82827c; --sand-11:#63635e; --sand-12:#21201c;
+  --lime-1:#fcfdfa; --lime-2:#f8faf3; --lime-3:#eef6d6; --lime-4:#e2f0bd;
+  --lime-5:#d3e7a6; --lime-6:#c2da91; --lime-7:#abc978; --lime-8:#8db654;
+  --lime-9:#bdee63; --lime-10:#b0e64c; --lime-11:#5c7c2f; --lime-12:#37401c;
+  --olive-3:#eff1ef; --olive-6:#d7dad7; --olive-11:#60655f; --olive-12:#1d211c;
+  --red-3:#feebec; --red-7:#f4a9aa; --red-9:#e5484d; --red-11:#ce2c31; --red-12:#641723;
+  --amber-3:#fff7c2; --amber-7:#e9c162; --amber-11:#ab6400; --amber-12:#4f3422;
+  --green-3:#e6f6eb; --green-7:#8eceaa; --green-11:#218358; --green-12:#193b2d;
+  --mc-page:var(--sand-2); --mc-surface:var(--sand-1); --mc-elevated:var(--sand-1);
+  --mc-text:var(--sand-12); --mc-muted:var(--sand-11); --mc-border:var(--sand-6); --mc-control-border:var(--sand-7);
+  --mc-primary:var(--lime-9); --mc-primary-hover:var(--lime-10); --mc-on-primary:var(--lime-12);
+  --mc-secondary:var(--sand-3); --mc-hover:var(--sand-4); --mc-selected:var(--lime-3);
+  --mc-focus:var(--lime-11); --mc-destructive:var(--red-11); --mc-error-bg:var(--red-3);
+  --mc-success:var(--green-11); --mc-success-bg:var(--green-3); --mc-warning:var(--amber-11); --mc-warning-bg:var(--amber-3);
+  --mc-font:Inter,"Microsoft YaHei","PingFang SC",sans-serif;
+  --mc-display:"Iowan Old Style","Songti SC","SimSun",serif;
+  --mc-body:16px; --mc-control:14px; --mc-caption:12px;
+  --mc-radius-sm:8px; --mc-radius-md:12px; --mc-radius-lg:20px;
+  --mc-hairline:.5px; --mc-duration:250ms; --mc-ease:ease-out;
+  --mc-shadow:0 16px 40px color-mix(in srgb,var(--sand-12) 12%,transparent);
+  --sand-dark-1:#111110; --sand-dark-2:#191918; --sand-dark-3:#222221; --sand-dark-4:#2a2a28;
+  --sand-dark-6:#3b3a37; --sand-dark-7:#494844; --sand-dark-11:#b5b3ad; --sand-dark-12:#eeeeec;
+  --lime-dark-3:#1f2917;
+}
+/* Explicit dark surfaces for the home CTA and future workspace surfaces.
+   No automatic body-wide dark mode or inherited legacy editor overrides. */
+.medclip-dark {
+  --mc-page:var(--sand-dark-1); --mc-surface:var(--sand-dark-2); --mc-elevated:var(--sand-dark-3);
+  --mc-text:var(--sand-dark-12); --mc-muted:var(--sand-dark-11); --mc-border:var(--sand-dark-6); --mc-control-border:var(--sand-dark-7);
+  --mc-secondary:var(--sand-dark-3); --mc-hover:var(--sand-dark-4); --mc-selected:var(--lime-dark-3);
+  --mc-focus:var(--lime-9); --mc-primary:var(--lime-9); --mc-on-primary:var(--lime-12);
+}

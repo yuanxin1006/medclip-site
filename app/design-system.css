@@ -1,0 +1,46 @@
+/* Shared visual primitives. Deliberately scoped away from editor geometry. */
+body.medclip-app { background:var(--mc-page); color:var(--mc-text); font-family:var(--mc-font); }
+.medclip-app .platform-page { background:var(--mc-page); color:var(--mc-text); padding:60px clamp(20px,5vw,80px) 80px; font-size:var(--mc-body); line-height:1.65; }
+.medclip-app .platform-page > * { max-width:1280px; }
+.medclip-app .platform-page-heading { align-items:center; gap:24px; margin-bottom:40px; }
+.medclip-app .platform-page-heading h1,.medclip-app .auth-card h1 { color:var(--mc-text); font-family:var(--mc-display); font-size:clamp(36px,4vw,56px); font-weight:500; line-height:1.2; letter-spacing:-.04em; text-wrap:balance; }
+.medclip-app .platform-page-heading p:not(.platform-kicker) { color:var(--mc-muted); font-size:var(--mc-body); max-width:62ch; }
+.medclip-app .platform-kicker { color:var(--mc-muted); font-size:var(--mc-caption); letter-spacing:0; }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog) :is(button,input,textarea,select) { font-family:var(--mc-font); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) :is(.platform-primary-button,.platform-secondary-button) { display:inline-flex; justify-content:center; align-items:center; gap:8px; min-height:44px; box-sizing:border-box; border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-md); padding:10px 18px; font-size:var(--mc-control); font-weight:650; line-height:1.4; text-decoration:none; transition:background-color var(--mc-duration) var(--mc-ease),transform var(--mc-duration) var(--mc-ease); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) .platform-primary-button { background:var(--mc-primary); color:var(--mc-on-primary); border-color:transparent; }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) .platform-primary-button:hover:not(:disabled) { background:var(--mc-primary-hover); transform:translateY(-1px); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) .platform-secondary-button { background:var(--mc-surface); color:var(--mc-text); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) .platform-secondary-button:hover:not(:disabled) { background:var(--mc-secondary); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog,.anonymous-landing-gate) :is(.platform-primary-button,.platform-secondary-button):active:not(:disabled) { transform:translateY(1px); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog) :is(a,button,input,textarea,select):focus-visible { outline:3px solid var(--mc-focus); outline-offset:3px; }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog) :disabled { opacity:.55; cursor:not-allowed; transform:none; }
+.medclip-app :is(.platform-form,.auth-form,.ai-music-form,.ai-provider-form) :is(input,textarea,select) { box-sizing:border-box; width:100%; background:var(--mc-surface); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-sm); padding:12px; font-size:var(--mc-body); font-weight:400; line-height:1.5; }
+.medclip-app :is(.platform-form,.auth-form,.ai-music-form,.ai-provider-form) label { color:var(--mc-text); font-size:var(--mc-control); font-weight:600; }
+.medclip-app :is(.platform-form,.auth-form,.ai-music-form,.ai-provider-form) small { color:var(--mc-muted); font-size:var(--mc-caption); line-height:1.6; }
+.medclip-app :is(.platform-modal-backdrop,.ai-delete-dialog-backdrop) { background:color-mix(in srgb,var(--sand-12) 45%,transparent); }
+.medclip-app :is(.platform-modal,.ai-delete-dialog) { background:var(--mc-elevated); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); box-shadow:var(--mc-shadow); }
+.medclip-app :is(.platform-modal,.ai-delete-dialog) h2 { color:var(--mc-text); font-family:var(--mc-display); font-size:28px; font-weight:500; }
+.medclip-app :is(.music-page-message,.ai-provider-notice,.auth-error,.ai-task-result-error,.async-music-error) { border:0; border-radius:var(--mc-radius-sm); box-shadow:none; font-size:var(--mc-control); }
+.medclip-app :is(.music-page-message.is-error,.ai-provider-notice.is-error,.auth-error,.ai-task-result-error,.async-music-error) { background:var(--mc-error-bg); color:var(--mc-destructive); }
+.medclip-app :is(.music-page-message.is-warning,.ai-provider-notice.is-warning,.platform-status-pill) { background:var(--mc-warning-bg); color:var(--mc-warning); }
+.medclip-app :is(.music-page-message.is-success,.ai-provider-notice.is-success) { background:var(--mc-success-bg); color:var(--mc-success); }
+.medclip-app :is(.platform-page,.platform-modal,.ai-delete-dialog) :is(.is-danger,.ai-provider-delete) { color:var(--mc-destructive); background:var(--mc-error-bg); border-color:var(--red-7); }
+.medclip-app .ai-services-gate { background:var(--mc-surface); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); }
+.medclip-app .ai-services-gate h1 { color:var(--mc-text); font-family:var(--mc-display); }
+.medclip-app .ai-services-gate p:not(.platform-kicker) { color:var(--mc-muted); }
+.medclip-app .platform-page .ai-task-provider-selector { border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); background:var(--mc-surface); padding:24px; box-shadow:none; }
+.medclip-app .platform-page .ai-task-provider-heading h3 { color:var(--mc-text); font-size:20px; }
+.medclip-app .platform-page .ai-task-provider-heading a { color:var(--lime-11); font-size:var(--mc-control); }
+.medclip-app .platform-page .ai-task-provider-options { gap:12px; }
+.medclip-app .platform-page .ai-task-provider-options button { background:var(--mc-surface); color:var(--mc-text); border:var(--mc-hairline) solid var(--mc-control-border); border-radius:var(--mc-radius-md); padding:14px; transition:background-color var(--mc-duration) var(--mc-ease); }
+.medclip-app .platform-page .ai-task-provider-options button.is-selected { border-color:var(--lime-8); background:var(--mc-selected); box-shadow:none; }
+.medclip-app .platform-page .ai-task-provider-options button span { color:var(--mc-muted); font-size:var(--mc-caption); }
+.medclip-app .platform-page .ai-task-provider-options button span.is-connected { color:var(--mc-success); }
+.medclip-app .platform-page :is(.ai-task-provider-auth-required,.ai-task-provider-empty,.ai-task-provider-error,.ai-task-cost-notice) { color:var(--mc-muted); font-size:var(--mc-caption); }
+.medclip-app .platform-page .ai-task-provider-error { color:var(--mc-destructive); }
+.medclip-app .platform-page :is(.ai-task-provider-empty,.ai-task-provider-auth-required,.ai-task-cost-notice) { background:var(--mc-secondary); border-color:var(--mc-border); }
+.medclip-app .platform-page :is(.ai-task-provider-empty,.ai-task-provider-auth-required) a { color:var(--lime-11); }
+.medclip-app .platform-page .ai-task-safety-note { border-color:var(--mc-border); }
+@media(max-width:840px) { .medclip-app .platform-page { padding-top:36px; } .medclip-app .platform-page-heading { align-items:flex-start; flex-direction:column; } }
+@media(prefers-reduced-motion:reduce) { .medclip-app :is(.platform-page,.platform-header,.platform-modal,.ai-delete-dialog) * { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }

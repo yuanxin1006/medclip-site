@@ -1,4 +1,16 @@
-.netlify/
+.next
+dist
+out
+node_modules
 .DS_Store
-Thumbs.db
+*.log
+.env*
+!.env.example
+test-artifacts
+*.tsbuildinfo
 
+# Verified local Whisper assets are provisioned separately.
+/public/medclip-asr/
+
+# Verified local CLIP assets are prepared separately; never commit weights.
+/public/medclip-clip/

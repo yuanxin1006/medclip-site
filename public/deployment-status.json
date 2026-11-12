@@ -1,8 +1,0 @@
-{
-  "repository": "https://github.com/yuanxin1006/medclip-site",
-  "deployment": "netlify-git",
-  "production_branch": "main",
-  "site_name": "medclip-studio-2026",
-  "production_url": "https://medclip-studio-2026.netlify.app/",
-  "automatic_deploys": true
-}
