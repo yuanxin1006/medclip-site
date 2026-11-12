@@ -201,7 +201,6 @@ type Asset = {
   file?: File;
   mime?: string;
   duration?: number;
-  codecStatus?: "ready" | "incompatible" | "converting" | "error";
   semanticTopic?: string;
   semanticScore?: number;
 };
@@ -434,20 +433,20 @@ function readMediaDuration(url: string, mediaType: "audio" | "video") {
     const finish = (duration?: number) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(timer);
       media.removeAttribute("src");
       media.load();
       resolve(duration);
     };
     const timer = window.setTimeout(() => finish(), 5000);
-    media.preload = "metadata";
-    media.onloadedmetadata = () => {
-      window.clearTimeout(timer);
-      finish(Number.isFinite(media.duration) ? media.duration : undefined);
-    };
-    media.onerror = () => {
-      window.clearTimeout(timer);
-      finish();
-    };
+    const readDuration = () => Number.isFinite(media.duration) && media.duration > 0 ? media.duration : undefined;
+    media.preload = media instanceof HTMLVideoElement ? "auto" : "metadata";
+    if (media instanceof HTMLVideoElement) {
+      media.onloadeddata = () => finish(media.videoWidth > 0 ? readDuration() : undefined);
+    } else {
+      media.onloadedmetadata = () => finish(readDuration());
+    }
+    media.onerror = () => finish();
     media.src = url;
   });
 }
@@ -714,7 +713,6 @@ export default function Home() {
   const referenceObjectUrlOwnerRef = useRef<ReferenceObjectUrlOwner | null>(null);
   const referenceAnalysisTokenRef = useRef(0);
   const acceptanceInputHydratedRef = useRef(false);
-  const ffmpegRef = useRef<InstanceType<(typeof import("@ffmpeg/ffmpeg"))["FFmpeg"]> | null>(null);
   const videoAudioQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const transcriptionWorkerRef = useRef<Worker | null>(null);
   const activeTranscriptionRequestRef = useRef("");
@@ -729,6 +727,7 @@ export default function Home() {
     reject: (error: Error) => void;
   }>());
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [mediaImportError, setMediaImportError] = useState("");
   const [audios, setAudios] = useState<AudioAsset[]>([]);
   // With no explicit choice, a narration upload retains the legacy workflow.
   const [audioModeChoice, setAudioModeChoice] = useState<AudioInputMode | null>(null);
@@ -762,7 +761,6 @@ export default function Home() {
   const [matchingState, setMatchingState] = useState<AiState>("idle");
   const [matchingProgress, setMatchingProgress] = useState(0);
   const [matchSegments, setMatchSegments] = useState<MatchSegment[]>([]);
-  const [conversionProgress, setConversionProgress] = useState(0);
   const [durationMode, setDurationMode] = useState<DurationMode>("audio");
   const [customDuration, setCustomDuration] = useState(60);
   const [audioSelection, setAudioSelection] = useState<AudioSelection>(() =>
@@ -1615,12 +1613,17 @@ export default function Home() {
   };
 
   const addFiles = async (files: FileList | File[]) => {
-    const acceptedFiles = Array.from(files)
-      .filter((file) => file.type.startsWith("video/") || file.type.startsWith("image/"));
-    const next = await Promise.all(acceptedFiles.map(async (file) => {
-      const preview = URL.createObjectURL(file);
+    const incoming = Array.from(files);
+    if (!incoming.length) return;
+    const results = await Promise.all(incoming.map(async (file) => {
       const isVideo = file.type.startsWith("video/");
+      if (!isVideo && !file.type.startsWith("image/")) return null;
+      const preview = URL.createObjectURL(file);
       const duration = isVideo ? await readMediaDuration(preview, "video") : 4;
+      if (!duration) {
+        URL.revokeObjectURL(preview);
+        return null;
+      }
       return {
         id: crypto.randomUUID(),
         name: file.name,
@@ -1630,13 +1633,14 @@ export default function Home() {
         file,
         mime: file.type,
         duration,
-        codecStatus: isVideo && !duration ? ("incompatible" as const) : ("ready" as const)
       };
     }));
-    if (!next.length) {
-      setNotice("请选择 MP4、MOV、JPG 或 PNG 素材");
-      return;
-    }
+    const rejected = incoming.filter((_, index) => results[index] === null);
+    setMediaImportError(rejected.length
+      ? `当前浏览器不支持或无法读取：${rejected.map((file) => file.name).join("、")}。请使用 MP4（H.264/AAC）、WebM（VP8/VP9 + Opus）或 JPG、PNG、WebP。`
+      : "");
+    const next = results.filter((asset) => asset !== null);
+    if (!next.length) return;
     if (transcriptionBusy) stopTranscription(false);
     setAssets((current) => [...current, ...next].slice(0, 30));
     setMatchSegments([]);
@@ -1654,11 +1658,12 @@ export default function Home() {
       const kind=file.type.startsWith("video/")?"视频":file.type.startsWith("image/")?"图片":undefined;
       if(!kind)throw new Error("请选择视频或图片文件。");
       const duration=kind==="视频"?await readMediaDuration(preview,"video"):4;
+      if (!duration) throw new Error("当前浏览器无法播放这个视频，请使用 MP4（H.264/AAC）或浏览器支持的 WebM。");
       validateVisualRelink(expected,{name:file.name,kind,durationMs:Math.round((duration??0)*1000)});
       if(transcriptionBusy)stopTranscription(false);
       videoAnalysisAbortRef.current.get(assetId)?.abort();videoAnalysisAbortRef.current.delete(assetId);
       semanticAnalysisCacheRef.current.invalidateAsset(assetId);visualInsightCacheRef.current.delete(assetId);
-      setAssets(current=>[...current.filter(a=>a.id!==assetId),{id:assetId,name:expected.name,kind,size:formatSize(file.size),preview,file,mime:file.type,duration:duration??4,codecStatus:"ready"}]);
+      setAssets(current=>[...current.filter(a=>a.id!==assetId),{id:assetId,name:expected.name,kind,size:formatSize(file.size),preview,file,mime:file.type,duration}]);
       clearRenderedVideo();setNotice("已恢复素材关联，请核对画面。原有剪辑位置和字幕未改变。");
     }catch(error){URL.revokeObjectURL(preview);setNotice(error instanceof Error?error.message:"无法关联该文件。");}
   };
@@ -2022,179 +2027,19 @@ export default function Home() {
     syncPreviewMedia(next, previewPlaying);
   };
 
-  const loadFfmpeg = async () => {
-    if (ffmpegRef.current?.loaded) return ffmpegRef.current;
-    // Keep the pinned ESM wrapper outside the Next/Webpack bundle. Webpack's
-    // worker transform rewrites the wrapper's native dynamic import of the
-    // Blob URL used by FFmpeg Core into a module-chunk lookup, which fails in
-    // the browser before PCM extraction can finish.
-    const wrapperUrl = new URL(
-      "/medclip-export/ffmpeg/0.12.15/index.js",
-      window.location.origin
-    ).href;
-    const { FFmpeg } = await import(/* webpackIgnore: true */ wrapperUrl) as typeof import("@ffmpeg/ffmpeg");
-    const ffmpeg = ffmpegRef.current ?? new FFmpeg();
-    if (!ffmpegRef.current) {
-      ffmpeg.on("progress", ({ progress: value }) => {
-        setConversionProgress(Math.min(99, Math.max(1, Math.round(value * 100))));
-      });
-      ffmpegRef.current = ffmpeg;
-    }
-    if (!ffmpeg.loaded) {
-      const { toBlobURL } = await import("@ffmpeg/util");
-      const providers = [
-        "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm",
-        "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm"
-      ];
-      let coreURL = "";
-      let wasmURL = "";
-      let loadError: unknown;
-      try {
-        for (const provider of providers) {
-          try {
-            coreURL = await toBlobURL(`${provider}/ffmpeg-core.js`, "text/javascript");
-            wasmURL = await toBlobURL(`${provider}/ffmpeg-core.wasm`, "application/wasm");
-            loadError = undefined;
-            break;
-          } catch (error) {
-            loadError = error;
-            if (coreURL.startsWith("blob:")) URL.revokeObjectURL(coreURL);
-            if (wasmURL.startsWith("blob:")) URL.revokeObjectURL(wasmURL);
-            coreURL = "";
-            wasmURL = "";
-          }
-        }
-        if (!coreURL || !wasmURL) {
-          throw loadError instanceof Error ? loadError : new Error("无法下载视频转码核心");
-        }
-        await ffmpeg.load({ coreURL, wasmURL });
-      }
-      finally {
-        if (coreURL.startsWith("blob:")) URL.revokeObjectURL(coreURL);
-        if (wasmURL.startsWith("blob:")) URL.revokeObjectURL(wasmURL);
-      }
-    }
-    return ffmpeg;
-  };
-
-  const transcodeAsset = async (asset: Asset) => {
-    if (!asset.file || asset.kind !== "视频") return asset;
-    if (asset.file.size > 750 * 1024 * 1024) {
-      throw new Error(`${asset.name} 超过 750 MB，浏览器内存不足以安全转码，请先压缩或拆分素材。`);
-    }
-    setAssets((current) => current.map((item) =>
-      item.id === asset.id ? { ...item, codecStatus: "converting" } : item
-    ));
-    setConversionProgress(1);
-    const ffmpeg = await loadFfmpeg();
-    const { fetchFile } = await import("@ffmpeg/util");
-    const extension = asset.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "mp4";
-    const inputName = `input-${asset.id}.${extension}`;
-    const outputName = `output-${asset.id}.mp4`;
-    try {
-      await ffmpeg.writeFile(inputName, await fetchFile(asset.file));
-      const exitCode = await ffmpeg.exec([
-        "-i", inputName,
-        "-map", "0:v:0",
-        "-map", "0:a:0?",
-        "-c:a", "aac",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        outputName
-      ]);
-      if (exitCode !== 0) throw new Error("转码器未能完成该视频");
-      const data = await ffmpeg.readFile(outputName);
-      const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data);
-      const transferableBytes = new Uint8Array(bytes.byteLength);
-      transferableBytes.set(bytes);
-      const convertedBlob = new Blob([transferableBytes.buffer], { type: "video/mp4" });
-      const preview = URL.createObjectURL(convertedBlob);
-      const duration = await readMediaDuration(preview, "video");
-      if (!duration) {
-        URL.revokeObjectURL(preview);
-        throw new Error("转码后仍无法读取视频轨道");
-      }
-      if (asset.preview) URL.revokeObjectURL(asset.preview);
-      return {
-        ...asset,
-        name: asset.name.replace(/\.[^.]+$/, "") + "-网页兼容.mp4",
-        size: formatSize(convertedBlob.size),
-        preview,
-        file: new File([convertedBlob], outputName, { type: "video/mp4" }),
-        mime: "video/mp4",
-        duration,
-        codecStatus: "ready" as const
-      };
-    } finally {
-      try {
-        await ffmpeg.deleteFile(inputName);
-        await ffmpeg.deleteFile(outputName);
-      } catch {
-        // Temporary files may not exist if decoding failed early.
-      }
-    }
-  };
-
-  const ensurePlayableAssets = async () => {
-    let prepared = [...assets];
-    const incompatible = prepared.filter((asset) =>
-      asset.kind === "视频" && asset.codecStatus === "incompatible"
-    );
-    for (const asset of incompatible) {
-      try {
-        const converted = await transcodeAsset(asset);
-        prepared = prepared.map((item) => item.id === asset.id ? converted : item);
-        setAssets(prepared);
-      } catch (error) {
-        setAssets((current) => current.map((item) =>
-          item.id === asset.id ? { ...item, codecStatus: "error" } : item
-        ));
-        throw error;
-      }
-    }
-    setConversionProgress(incompatible.length ? 100 : 0);
-    return prepared;
-  };
-
   const extractVideoSpeech = async (asset: Asset) => {
     if (!asset.file) throw new Error(`请重新关联视频“${asset.name}”。`);
     if (asset.file.size > 750 * 1024 * 1024) throw new Error(`“${asset.name}”超过浏览器提取上限 750 MB，请先拆分视频。`);
-    if (typeof asset.duration === "number" && asset.duration > 0) {
-      try {
-        return await decodeVideoSpeechPcm(asset.file, asset.duration);
-      } catch {
-        // Older browsers and unsupported containers still use the existing decoder.
-      }
-    }
-    const ffmpeg = await loadFfmpeg();
-    const prefix = `speech-${crypto.randomUUID()}`;
-    const input = `${prefix}.video`;
-    const output = `${prefix}.pcm`;
-    let missingAudioTrack = false;
-    const onLog = ({ message }: { message: string }) => {
-      if (message.includes("matches no streams") && message.includes("0:a:0")) missingAudioTrack = true;
-    };
-    ffmpeg.on("log", onLog);
     try {
-      await ffmpeg.writeFile(input, new Uint8Array(await asset.file.arrayBuffer()));
-      const status = await ffmpeg.exec([
-        "-copyts", "-start_at_zero", "-i", input, "-map", "0:a:0", "-vn",
-        "-af", "aresample=16000:async=1:first_pts=0", "-ac", "1",
-        "-t", String(asset.duration), "-c:a", "pcm_f32le", "-f", "f32le", output,
-      ], 120_000);
-      if (missingAudioTrack) return null;
-      if (status !== 0) throw new Error("浏览器 FFmpeg 无法解码该视频的音轨。");
-      const bytes = await ffmpeg.readFile(output);
-      if (typeof bytes === "string" || !bytes.byteLength || bytes.byteLength % 4) throw new Error("提取的 PCM 音频无效。");
-      return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+      if (!asset.duration) throw new Error("无法确定视频时长。");
+      return await decodeVideoSpeechPcm(asset.file, asset.duration);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      throw new TranscriptionFailure("audio-decode", "preparing-audio", `无法提取“${asset.name}”的原声：${detail}`, { cause: error });
-    } finally {
-      ffmpeg.off("log", onLog);
-      await Promise.allSettled([input, output].map((file) => ffmpeg.deleteFile(file)));
+      throw new TranscriptionFailure(
+        "audio-decode", "preparing-audio",
+        `无法提取“${asset.name}”的原声：${detail} 请尝试 MP4（H.264/AAC）、WebM（VP8/VP9 + Opus）或上传独立音频。`,
+        { cause: error }
+      );
     }
   };
 
@@ -2205,7 +2050,7 @@ export default function Home() {
     if (activeConstraintSet?.activeConstraints.length) {
       throw new TranscriptionFailure("result-format", "preparing-audio", "当前工程有已确认的保护约束，请先解除保护再重新识别字幕。");
     }
-    const prepared = await ensurePlayableAssets();
+    const prepared = assets;
     assertCurrent();
     const visualLength = prepared.reduce((total, asset) => total + (asset.duration ?? 0), 0);
     const initialDuration = durationMode === "custom" ? Math.min(targetDuration, visualLength) : visualLength;
@@ -3004,8 +2849,7 @@ export default function Home() {
       previewAudioRef.current?.pause();
       pauseSelectionPreview();
       clearRenderedVideo();
-      setNotice("正在校验视频编码并建立音频时间轴");
-      const preparedAssets = await ensurePlayableAssets();
+      const preparedAssets = assets;
       let cues = captionRecords;
       if (!manualOnly && audioMode === "external" && subtitleSource === "auto" && !cues.length && transcriptionState !== "error") {
         try {
@@ -4545,7 +4389,7 @@ export default function Home() {
             </div>
             <span className="count-chip">{assets.length}/30</span>
           </div><input
-            accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp"
+            accept="video/mp4,video/webm,video/quicktime,image/jpeg,image/png,image/webp"
             hidden
             multiple
             onChange={handleMediaChange}
@@ -4568,8 +4412,10 @@ export default function Home() {
             <span className="upload-orbit"><UploadIcon size={27} /></span>
             <b>拖入视频或图片素材</b>
             <span>或点击选择文件，单个文件最大 2GB</span>
-            <small>支持 MP4、MOV、JPG、PNG、WEBP</small>
-          </div>{assets.length > 0 && (
+            <small>支持浏览器可播放的 MP4、WebM、MOV，以及 JPG、PNG、WebP</small>
+          </div>
+          {mediaImportError && <p role="alert" className="asset-alert">{mediaImportError}</p>}
+          {assets.length > 0 && (
             <div className="asset-list">
               {assets.map((asset, index) => (
                 <div className="asset-row" key={asset.id}>
@@ -4582,15 +4428,6 @@ export default function Home() {
                       {asset.kind}，{asset.size}
                       {asset.duration ? `，${formatDuration(asset.duration)}` : ""}
                     </span>
-                    {asset.codecStatus === "incompatible" && (
-                      <small className="asset-alert">视频编码不兼容，生成时将自动转成 H.264</small>
-                    )}
-                    {asset.codecStatus === "converting" && (
-                      <small className="asset-processing">正在转码（{conversionProgress}%） · <a href="/medclip-asr-notices/#ffmpeg">转码组件许可</a></small>
-                    )}
-                    {asset.codecStatus === "error" && (
-                      <small className="asset-alert">自动转码失败，请压缩素材后重试</small>
-                    )}
                     {asset.semanticTopic && (
                       <small className="asset-insight">
                         {CLIP_TEST_ENABLED ? "视觉候选：" : "已识别："}{asset.semanticTopic}

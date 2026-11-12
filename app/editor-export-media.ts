@@ -61,9 +61,7 @@ export async function decodeVideoSpeechPcm(file: Blob, duration: number): Promis
 }
 export async function openExportMedia(url:string,name:string,isVideo:boolean,original:boolean,signal:()=>boolean):Promise<ExportMedia>{
  const m=await loadExportMedia(),response=await fetch(url);if(!response.ok)throw Error('无法读取素材：'+name);
- let input:Media.Input;
- try{input=new m.Input({source:new m.BlobSource(await response.blob()),formats:[m.MP4]});}
- catch{throw Error('精确导出当前只接受可解析的 MP4 容器；该素材已安全拒绝，没有回退到实时录制。');}
+ const input=new m.Input({source:new m.BlobSource(await response.blob()),formats:[m.MP4]});
  try{
   const video=await input.getPrimaryVideoTrack();if(isVideo&&!video)throw Error('素材没有视频轨：'+name);
   if(video&&(!await video.canDecode()))throw Error('当前浏览器不能按帧解码：'+name);
@@ -72,7 +70,11 @@ export async function openExportMedia(url:string,name:string,isVideo:boolean,ori
   if(audioTrack&&!await audioTrack.canDecode())throw Error('当前浏览器不能按帧解码 MP4/AAC 原声音轨；此次已安全拒绝，没有回退到实时录制。');
   const audio=audioTrack?await decodeExportPcm(m,audioTrack,signal):null;
   return{input,video,audio,name};
- }catch(e){input.dispose();throw e;}
+ }catch(e){
+  input.dispose();
+  if(e instanceof m.UnsupportedInputFormatError)throw Error(`精确导出无法处理“${name}”的容器，请使用 MP4（H.264/AAC）素材。`);
+  throw e;
+ }
 }
 export async function pcmAtOutputRate(pcm:ExportPcm,rate=48000):Promise<ExportPcm>{
  if(pcm.rate===rate)return pcm;
