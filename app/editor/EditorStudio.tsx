@@ -4963,7 +4963,7 @@ export default function Home() {
                     )}
                   </>
                 ) : (
-                  <span>识别后可逐句校对；没有可靠时间码时不会估算。</span>
+                  <span>识别后可逐句校对；没有可靠时间码时不会估算。 {process.env.NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE === "hf-public" && process.env.NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT === "deploy-preview" && <a href="/medclip-asr-notices/">模型来源与许可</a>}</span>
                 )}
                 <details className="advanced-settings transcription-advanced">
                   <summary>高级设置与识别诊断</summary>

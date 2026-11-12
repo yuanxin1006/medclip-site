@@ -3,7 +3,12 @@
 import { env, pipeline } from "@huggingface/transformers";
 import whisperRevisions from "./whisper-models.json" with { type: "json" };
 import {
+  createHuggingFaceWhisperAssetRoutes,
   createIntegrityCheckingFetch,
+  HF_PUBLIC_MODEL_HOST,
+  HF_PUBLIC_MODEL_PATH_TEMPLATE,
+  HF_TRANSFORMERS_RUNTIME_BASE,
+  isHuggingFaceAsrPreviewEnabled,
   ONNX_RUNTIME_ASSET_DIRECTORY,
   resolveMedclipAssetBase,
   verifyRuntimeModule,
@@ -112,57 +117,35 @@ type Classifier = (
 
 const pipelines = new Map<string, Promise<unknown>>();
 
-let integrityBaseHref: string | null = null;
+let integrityConfigurationKey: string | null = null;
 let integrityOriginalFetch: typeof fetch | null = null;
 let integrityFetch: typeof fetch | null = null;
 
-function configureIntegrityFetch(assetBase: URL) {
-  if (integrityBaseHref && integrityBaseHref !== assetBase.href) {
-    throw new Error("同一识别 Worker 不允许切换资源基址。");
-  }
-  if (integrityFetch) {
-    return {
-      fetch: integrityFetch,
-      restore() {},
-    };
-  }
-
+function configureIntegrityFetch(assetBase: URL, routes: ReturnType<typeof createHuggingFaceWhisperAssetRoutes>, rejectUnmappedRequests: boolean) {
+  const key = [assetBase.href, String(rejectUnmappedRequests), ...routes.map((route) => route.requestBase + "=>" + route.manifestPrefix)].join("|");
+  if (integrityConfigurationKey && integrityConfigurationKey !== key) throw new Error("同一识别 Worker 不允许切换资源映射。");
+  if (integrityFetch) return { fetch: integrityFetch, restore() {} };
   const original = globalThis.fetch.bind(globalThis);
-  const checked = createIntegrityCheckingFetch(original, assetBase);
+  const checked = createIntegrityCheckingFetch(original, assetBase, undefined, { routes, rejectUnmappedRequests });
   globalThis.fetch = checked;
-  integrityBaseHref = assetBase.href;
+  integrityConfigurationKey = key;
   integrityOriginalFetch = original;
   integrityFetch = checked;
-
-  return {
-    fetch: checked,
-    restore() {
-      if (globalThis.fetch === checked && integrityOriginalFetch) {
-        globalThis.fetch = integrityOriginalFetch;
-      }
-      integrityBaseHref = null;
-      integrityOriginalFetch = null;
-      integrityFetch = null;
-    },
-  };
+  return { fetch: checked, restore() {
+    if (globalThis.fetch === checked && integrityOriginalFetch) globalThis.fetch = integrityOriginalFetch;
+    integrityConfigurationKey = null; integrityOriginalFetch = null; integrityFetch = null;
+  } };
 }
-
 function getTranscriber(model: string, requestId: string) {
   let instance = pipelines.get(model);
   if (!instance) {
     if (!Object.hasOwn(whisperRevisions, model)) throw new Error("不支持此字幕识别模型。");
     const revision = whisperRevisions[model as keyof typeof whisperRevisions];
-    const assetBase = resolveMedclipAssetBase(
-      process.env.NEXT_PUBLIC_MEDCLIP_ASSET_BASE_URL,
-      self.location.href,
-      process.env.NODE_ENV === "production",
-    );
-    const assetRoot = new URL("medclip-asr/", assetBase);
-    const runtimeRoot = new URL(ONNX_RUNTIME_ASSET_DIRECTORY, assetRoot);
-    const runtimeModuleUrl = new URL(
-      "ort-wasm-simd-threaded.jsep.mjs",
-      runtimeRoot,
-    ).href;
+    const usePublicHfAssets = isHuggingFaceAsrPreviewEnabled(process.env.NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE, process.env.NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT);
+    const assetBase = usePublicHfAssets ? new URL("/", self.location.href) : resolveMedclipAssetBase(process.env.NEXT_PUBLIC_MEDCLIP_ASSET_BASE_URL, self.location.href, process.env.NODE_ENV === "production");
+    const runtimeRoot = usePublicHfAssets ? new URL(HF_TRANSFORMERS_RUNTIME_BASE) : new URL(ONNX_RUNTIME_ASSET_DIRECTORY, new URL("medclip-asr/", assetBase));
+    const runtimeModuleUrl = new URL("ort-wasm-simd-threaded.jsep.mjs", runtimeRoot).href;
+    const routes = usePublicHfAssets ? createHuggingFaceWhisperAssetRoutes(whisperRevisions) : [];
 
     // Transformers.js 3.8.1 only applies localModelPath to repository-style
     // model IDs. Keep the canonical model ID and route its pinned revision to
@@ -183,9 +166,14 @@ function getTranscriber(model: string, requestId: string) {
 
     // These are the only remote endpoints Transformers is allowed to use.
     // Do not use the default Hugging Face host or a floating `main` revision.
-    env.remoteHost = assetBase.href;
-    env.remotePathTemplate = "medclip-asr/{model}/{revision}/";
-    const integrity = configureIntegrityFetch(assetBase);
+    if (usePublicHfAssets) {
+      env.remoteHost = HF_PUBLIC_MODEL_HOST;
+      env.remotePathTemplate = HF_PUBLIC_MODEL_PATH_TEMPLATE;
+    } else {
+      env.remoteHost = assetBase.href;
+      env.remotePathTemplate = "medclip-asr/{model}/{revision}/";
+    }
+    const integrity = configureIntegrityFetch(assetBase, routes, true);
 
     instance = (async () => {
       await verifyRuntimeModule(integrity.fetch, runtimeModuleUrl);
