@@ -19,5 +19,13 @@
     X-Content-Type-Options = "nosniff"
 
 [context.deploy-preview.environment]
-  NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE = "hf-public"
+  NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE = "modelscope-public"
   NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT = "deploy-preview"
+  NEXT_PUBLIC_MEDCLIP_MODELSCOPE_REPO = "yuanxin1006/medclip-whisper-browser-assets"
+  NEXT_PUBLIC_MEDCLIP_MODELSCOPE_COMMIT = "17aa163d4608e3cead1b559deab78baa319c9314"
+
+[[headers]]
+  for = "/medclip-asr-runtime/runtime/onnxruntime-web/1.22.0-dev.20250409-89f8206ba4/ort-wasm-simd-threaded.jsep.mjs"
+  [headers.values]
+    Content-Type = "text/javascript"
+    Cache-Control = "public, max-age=31536000, immutable"

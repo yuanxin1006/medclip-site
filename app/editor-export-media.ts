@@ -7,16 +7,17 @@ export function loadExportMedia(){
 }
 export type ExportPcm={rate:number;planes:Float32Array[];first:number;end:number;intervals:{start:number;end:number}[]};
 export type ExportMedia={input:Media.Input;video:Media.InputVideoTrack|null;audio:ExportPcm|null;image?:HTMLImageElement;name:string};
-export async function decodeExportPcm(m:Bunny,track:Media.InputAudioTrack,signal:()=>boolean):Promise<ExportPcm>{
+export async function decodeExportPcm(m:Bunny,track:Media.InputAudioTrack,signal:()=>boolean,timelineStart=0):Promise<ExportPcm>{
  const parts:{at:number;data:Float32Array[]}[]=[];let rate=0,channels=0,end=0,first=Infinity;
  for await(const sample of new m.AudioSampleSink(track).samples()){
   try{
    if(signal())throw new DOMException('已取消','AbortError');
    rate||=sample.sampleRate;channels||=sample.numberOfChannels;
    if(channels>2||rate!==sample.sampleRate||channels!==sample.numberOfChannels)throw Error('该音轨声道或采样率变化，尚不支持精确导出。');
-   const at=Math.round(sample.timestamp*rate);
+   const timestamp=sample.timestamp-timelineStart;
+   const at=Math.round(timestamp*rate);
    const data=Array.from({length:channels},(_,planeIndex)=>{const p=new Float32Array(sample.numberOfFrames);sample.copyTo(p,{planeIndex,format:'f32-planar'});return p;});
-   parts.push({at,data});first=Math.min(first,sample.timestamp);end=Math.max(end,sample.timestamp+sample.duration);
+   parts.push({at,data});first=Math.min(first,timestamp);end=Math.max(end,timestamp+sample.duration);
    if(end*rate*channels*4>512*1024*1024)throw Error('源音轨超过本地精确导出的内存范围，请先缩短素材。');
   }finally{sample.close();}
  }
@@ -32,6 +33,31 @@ export async function decodeExportPcm(m:Bunny,track:Media.InputAudioTrack,signal
   previousEnd=to;
  }
  return{rate,planes,first:Math.max(0,first),end,intervals};
+}
+export async function decodeVideoSpeechPcm(file: Blob, duration: number): Promise<Float32Array | null> {
+  const media = await loadExportMedia();
+  const input = new media.Input({ source: new media.BlobSource(file), formats: media.ALL_FORMATS });
+  try {
+    const [track] = await input.getAudioTracks();
+    if (!track) return null;
+    if (!await track.canDecode()) throw new Error("当前浏览器无法直接解码此视频音轨。");
+    const timelineStart = await input.getFirstTimestamp();
+    if (!Number.isFinite(timelineStart) || !Number.isFinite(duration) || duration <= 0) {
+      throw new Error("无法确定视频原声的时间范围。");
+    }
+    const pcm = await decodeExportPcm(media, track, () => false, timelineStart);
+    const [left, right] = pcm.planes;
+    const count = Math.min(left.length, Math.round(duration * pcm.rate));
+    if (!count) throw new Error("视频原声没有可识别的音频样本。");
+    const mono = left.slice(0, count);
+    if (right) {
+      for (let i = 0; i < count; i++) mono[i] = (mono[i] + right[i]) / 2;
+    }
+    const output = await pcmAtOutputRate({ ...pcm, planes: [mono], end: count / pcm.rate }, 16_000);
+    return output.planes[0].subarray(0, Math.round(duration * 16_000));
+  } finally {
+    input.dispose();
+  }
 }
 export async function openExportMedia(url:string,name:string,isVideo:boolean,original:boolean,signal:()=>boolean):Promise<ExportMedia>{
  const m=await loadExportMedia(),response=await fetch(url);if(!response.ok)throw Error('无法读取素材：'+name);

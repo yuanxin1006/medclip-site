@@ -4,6 +4,7 @@ import { env, pipeline } from "@huggingface/transformers";
 import whisperRevisions from "./whisper-models.json" with { type: "json" };
 import {
   createHuggingFaceWhisperAssetRoutes,
+  createModelScopePreviewAssets,
   createIntegrityCheckingFetch,
   HF_PUBLIC_MODEL_HOST,
   HF_PUBLIC_MODEL_PATH_TEMPLATE,
@@ -142,17 +143,25 @@ function getTranscriber(model: string, requestId: string) {
     if (!Object.hasOwn(whisperRevisions, model)) throw new Error("不支持此字幕识别模型。");
     const revision = whisperRevisions[model as keyof typeof whisperRevisions];
     const usePublicHfAssets = isHuggingFaceAsrPreviewEnabled(process.env.NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE, process.env.NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT);
-    const assetBase = usePublicHfAssets ? new URL("/", self.location.href) : resolveMedclipAssetBase(process.env.NEXT_PUBLIC_MEDCLIP_ASSET_BASE_URL, self.location.href, process.env.NODE_ENV === "production");
+    const deployContext = process.env.NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT;
+    const useModelScope = process.env.NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE === "modelscope-public" &&
+      (deployContext === "deploy-preview" || deployContext === "production");
+    const modelScope = useModelScope ? createModelScopePreviewAssets(
+      process.env.NEXT_PUBLIC_MEDCLIP_MODELSCOPE_REPO,
+      process.env.NEXT_PUBLIC_MEDCLIP_MODELSCOPE_COMMIT,
+      self.location.href
+    ) : undefined;
+    const assetBase = usePublicHfAssets || modelScope ? new URL("/", self.location.href) : resolveMedclipAssetBase(process.env.NEXT_PUBLIC_MEDCLIP_ASSET_BASE_URL, self.location.href, process.env.NODE_ENV === "production");
     const runtimeRoot = usePublicHfAssets ? new URL(HF_TRANSFORMERS_RUNTIME_BASE) : new URL(ONNX_RUNTIME_ASSET_DIRECTORY, new URL("medclip-asr/", assetBase));
-    const runtimeModuleUrl = new URL("ort-wasm-simd-threaded.jsep.mjs", runtimeRoot).href;
-    const routes = usePublicHfAssets ? createHuggingFaceWhisperAssetRoutes(whisperRevisions) : [];
+    const runtimeModuleUrl = modelScope?.mjsUrl ?? new URL("ort-wasm-simd-threaded.jsep.mjs", runtimeRoot).href;
+    const routes = modelScope?.routes ?? (usePublicHfAssets ? createHuggingFaceWhisperAssetRoutes(whisperRevisions) : []);
 
     // Transformers.js 3.8.1 only applies localModelPath to repository-style
     // model IDs. Keep the canonical model ID and route its pinned revision to
     // the explicitly configured asset host instead of passing a synthetic
     // multi-segment path that is treated as a missing local filesystem file.
     env.allowRemoteModels = true;
-    env.allowLocalModels = true;
+    env.allowLocalModels = !modelScope;
     // Disable Transformers CacheStorage so every resource passes through the
     // SHA-256 verifier. The browser HTTP cache remains available for immutable URLs.
     env.useBrowserCache = false;
@@ -161,7 +170,7 @@ function getTranscriber(model: string, requestId: string) {
 
     const wasm = env.backends.onnx.wasm;
     if (!wasm) throw new Error("当前浏览器无法使用 ONNX WebAssembly。");
-    wasm.wasmPaths = runtimeRoot.href;
+    wasm.wasmPaths = modelScope ? { mjs: modelScope.mjsUrl, wasm: modelScope.wasmUrl } : runtimeRoot.href;
     wasm.numThreads = 1;
 
     // These are the only remote endpoints Transformers is allowed to use.
@@ -170,7 +179,7 @@ function getTranscriber(model: string, requestId: string) {
       env.remoteHost = HF_PUBLIC_MODEL_HOST;
       env.remotePathTemplate = HF_PUBLIC_MODEL_PATH_TEMPLATE;
     } else {
-      env.remoteHost = assetBase.href;
+      env.remoteHost = modelScope?.modelBase.href ?? assetBase.href;
       env.remotePathTemplate = "medclip-asr/{model}/{revision}/";
     }
     const integrity = configureIntegrityFetch(assetBase, routes, true);

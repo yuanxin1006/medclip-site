@@ -22,6 +22,7 @@ import TimelineEditor from "../TimelineEditor";
 import {OutputCanvasSettings} from "../OutputCanvasSettings";
 import {changeOutputCanvas,outputCanvasSize,isCanvasOnlyChange} from "../editor-output-settings";
 import {renderTimelineExport} from "../editor-export";
+import { decodeVideoSpeechPcm } from "../editor-export-media";
 import {EditorCaptionView} from "../editor-caption-view";
 import {EDITOR_FLOW_STAGES,friendlyEditingError,validateVisualRelink,type EditorFlowStage} from "../editor-workflow";
 import {guardManualTimelineMutationV1} from "../editor-manual-constraint-guard";
@@ -2160,6 +2161,13 @@ export default function Home() {
   const extractVideoSpeech = async (asset: Asset) => {
     if (!asset.file) throw new Error(`请重新关联视频“${asset.name}”。`);
     if (asset.file.size > 750 * 1024 * 1024) throw new Error(`“${asset.name}”超过浏览器提取上限 750 MB，请先拆分视频。`);
+    if (typeof asset.duration === "number" && asset.duration > 0) {
+      try {
+        return await decodeVideoSpeechPcm(asset.file, asset.duration);
+      } catch {
+        // Older browsers and unsupported containers still use the existing decoder.
+      }
+    }
     const ffmpeg = await loadFfmpeg();
     const prefix = `speech-${crypto.randomUUID()}`;
     const input = `${prefix}.video`;

@@ -62,6 +62,52 @@ export function createHuggingFaceWhisperAssetRoutes(revisions: Readonly<Record<s
   return Object.freeze([...modelRoutes, runtimeRoute]);
 }
 
+export function createModelScopePreviewAssets(repo: string | undefined, commit: string | undefined, workerHref: string) {
+  if (!repo || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\/[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(repo) ||
+      !commit || !/^[a-f0-9]{40}$/.test(commit)) {
+    throw new Error("ModelScope Preview 必须配置公开仓库 ID 和完整提交 SHA。");
+  }
+
+  const pageBase = new URL("/", workerHref);
+  const origin = "https://modelscope.cn";
+  const modelBase = new URL("/models/" + repo + "/resolve/" + commit + "/", origin);
+  const modelPrefix = "medclip-asr/";
+  const runtimePrefix = modelPrefix + ONNX_RUNTIME_ASSET_DIRECTORY;
+  const mjs = "ort-wasm-simd-threaded.jsep.mjs";
+  const wasm = "ort-wasm-simd-threaded.jsep.wasm";
+  const localRuntimeBase = new URL("medclip-asr-runtime/" + ONNX_RUNTIME_ASSET_DIRECTORY, pageBase);
+  const mimeAliases: Record<string, readonly string[]> = {
+    [runtimePrefix + wasm]: ["application/octet-stream"],
+  };
+  for (const path of Object.keys(runtimeManifest)) {
+    if (path.startsWith("medclip-asr/Xenova/") && /\.(json|md)$/.test(path)) {
+      mimeAliases[path] = ["text/plain", "application/octet-stream"];
+    }
+  }
+
+  const routes: readonly IntegritySourceRoute[] = [
+    {
+      requestBase: new URL(modelPrefix, modelBase).href,
+      manifestPrefix: modelPrefix,
+      allowedFinalOrigins: [origin, "https://cdn-lfs-cn-1.modelscope.cn"],
+      mimeAliases,
+    },
+    {
+      requestBase: localRuntimeBase.href,
+      manifestPrefix: runtimePrefix,
+      allowedFinalOrigins: [pageBase.origin],
+      mimeAliases: { [runtimePrefix + mjs]: ["application/javascript"] },
+    },
+  ];
+
+  return {
+    modelBase,
+    routes,
+    mjsUrl: new URL(mjs, localRuntimeBase).href,
+    wasmUrl: new URL(runtimePrefix + wasm, modelBase).href,
+  };
+}
+
 export function resolveMedclipAssetBase(configuredBase: string | undefined, pageHref: string, production: boolean): URL {
   const configured = configuredBase?.trim();
   if (!configured) {
