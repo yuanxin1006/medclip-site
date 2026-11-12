@@ -101,6 +101,7 @@ type Props = {
   getPreviewTime: () => number | undefined;
   onClose: () => void;
   onProjectChange: (project: EditorProject) => void;
+  onDownloadSubtitles: (cues: TimelineCaption[]) => void;
   onPreviewTimeChange: (seconds: number, playing: boolean) => void;
   onInitialUndoConsumed?: () => void;
   onRender: () => void;
@@ -175,6 +176,7 @@ export default function TimelineEditor({
   getPreviewTime,
   onClose,
   onProjectChange,
+  onDownloadSubtitles,
   onPreviewTimeChange,
   onInitialUndoConsumed,
   onRender,
@@ -1483,6 +1485,12 @@ export default function TimelineEditor({
           <button disabled={!selection || selection.kind === "overlay" || selection.kind === "secondary-audio"} onClick={splitSelection} type="button">✂ 分割</button>
           <button disabled={!canMergeCaption} onClick={mergeCaption} type="button">合并字幕</button>
           <button className="danger" disabled={!selection} onClick={deleteSelection} type="button">删除</button>
+          <button
+            aria-describedby={!draft.captions.length ? "timeline-srt-empty-hint" : undefined}
+            disabled={!draft.captions.length}
+            onClick={() => onDownloadSubtitles(draft.captions)}
+            type="button"
+          >下载 SRT</button>
           <button className="render-button" onClick={onRender} type="button">{renderLabel}</button>
           <button aria-label="关闭编辑器" className="close-editor" onClick={onClose} type="button">×</button>
         </div>
@@ -1908,6 +1916,7 @@ export default function TimelineEditor({
       <div className="timeline-dock">
         <div className="timeline-tools">
           <b>多轨时间线</b>
+          {!draft.captions.length && <small id="timeline-srt-empty-hint">暂无字幕可下载</small>}
           <label><span>缩放</span><input max="160" min="24" onChange={(event) => setZoom(Number(event.target.value))} type="range" value={zoom} /></label>
           <button
             className={snapping ? "selected" : ""}

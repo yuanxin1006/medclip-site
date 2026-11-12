@@ -1600,9 +1600,9 @@ export default function Home() {
     setNotice("已恢复本次自动识别的原始字幕");
   };
 
-  const downloadSubtitleFile = () => {
-    if (!subtitleCues.length) return;
-    const blob = new Blob([cuesToSrt(subtitleCues)], {
+  const downloadSubtitleFile = (cues: TimelineCaption[]) => {
+    if (!cues.length) return;
+    const blob = new Blob([cuesToSrt(cues)], {
       type: "application/x-subrip;charset=utf-8"
     });
     const url = URL.createObjectURL(blob);
@@ -4586,7 +4586,7 @@ export default function Home() {
                       <small className="asset-alert">视频编码不兼容，生成时将自动转成 H.264</small>
                     )}
                     {asset.codecStatus === "converting" && (
-                      <small className="asset-processing">正在转码（{conversionProgress}%）</small>
+                      <small className="asset-processing">正在转码（{conversionProgress}%） · <a href="/medclip-asr-notices/#ffmpeg">转码组件许可</a></small>
                     )}
                     {asset.codecStatus === "error" && (
                       <small className="asset-alert">自动转码失败，请压缩素材后重试</small>
@@ -4921,6 +4921,16 @@ export default function Home() {
                 
               </div>
             </div>
+            <div className="subtitle-proofread-actions">
+              {!subtitleCues.length && <small id="srt-empty-hint">暂无字幕可下载</small>}
+              <button
+                aria-describedby={!subtitleCues.length ? "srt-empty-hint" : undefined}
+                className="flow-secondary"
+                disabled={!subtitleCues.length}
+                onClick={() => downloadSubtitleFile(subtitleCues)}
+                type="button"
+              >下载 SRT</button>
+            </div>
           </div><div className="subtitle-source-tabs">
             <button
               className={subtitleSource === "auto" ? "selected" : ""}
@@ -4971,7 +4981,7 @@ export default function Home() {
                     )}
                   </>
                 ) : (
-                  <span>识别后可逐句校对；没有可靠时间码时不会估算。 {process.env.NEXT_PUBLIC_MEDCLIP_ASR_RESOURCE_MODE === "hf-public" && process.env.NEXT_PUBLIC_MEDCLIP_NETLIFY_CONTEXT === "deploy-preview" && <a href="/medclip-asr-notices/">模型来源与许可</a>}</span>
+                  <span>识别后可逐句校对；没有可靠时间码时不会估算。 <a href="/medclip-asr-notices/">模型与媒体组件许可</a></span>
                 )}
                 <details className="advanced-settings transcription-advanced">
                   <summary>高级设置与识别诊断</summary>
@@ -5176,7 +5186,6 @@ export default function Home() {
                   {recognizedSubtitleText && !videoTranscription && subtitleText !== recognizedSubtitleText && (
                     <button onClick={restoreRecognizedSubtitles} type="button">恢复识别结果</button>
                   )}
-                  <button onClick={downloadSubtitleFile} type="button">下载 SRT</button>
                 </div>
               </div>
               <div className="subtitle-editor-list">
@@ -5966,6 +5975,7 @@ export default function Home() {
           onPreviewTimeChange={handleEditorPreviewTimeChange}
           onInitialUndoConsumed={() => setEditorAIUndoProject(null)}
           onImportSecondaryAudio={importSecondaryAudio}
+          onDownloadSubtitles={downloadSubtitleFile}
           onProjectChange={handleEditorProjectChange}
           onConstraintBlocked={(message) => setNotice(message)}
           onConstraintBlockedResult={setBlockedExplanationResult}
