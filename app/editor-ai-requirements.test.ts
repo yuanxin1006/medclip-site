@@ -379,7 +379,7 @@ test("SET_CAPTION_TEXT production wiring uses one project commit and the existin
   assert.match(studio, /const handleEditorProjectChange = \(nextProject: EditorProject\) => \{[\s\S]*setEditorProject\(nextProject\)[\s\S]*syncCaptionRecordsFromProject\(nextProject\)/);
   assert.match(studio, /const subtitleCues = captionRecords;[\s\S]*activeSubtitleCue\?\.text/);
   assert.match(studio, /new Blob\(\[cuesToSrt\(cues\)\]/);
-  assert.match(studio, /localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio, /localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
   assert.match(studio, /const updateSubtitleCueText = \(cueId: string, text: string\) => \{[\s\S]*commitCaptionRecords\(updated\)/);
   assert.doesNotMatch(studio, /applySetCaptionTextToProject/);
   assert.match(timeline, /recordProjectUndoSnapshot\(historyRef\.current, initialUndoProject\)/);

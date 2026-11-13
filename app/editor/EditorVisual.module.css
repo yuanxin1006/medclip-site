@@ -205,6 +205,7 @@
 .scope :global(.flow-relink p) { font-size:var(--mc-caption); line-height:1.6; margin:8px 0; }
 .scope :global(.flow-relink label) { display:grid; gap:8px; padding:10px 0; overflow-wrap:anywhere; }
 .scope :global(.flow-relink input) { width:100%; min-width:0; }
+.scope :global(.flow-relink video), .scope :global(.flow-relink img) { display:block; max-width:100%; max-height:240px; margin-bottom:8px; }
 .scope :global(.flow-ai-tabs) { display:flex; flex-wrap:wrap; gap:8px; border-bottom:var(--mc-hairline) solid var(--mc-border); padding-bottom:12px; }
 .scope :global(.flow-ai-tabs button) { border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-sm); padding:9px 14px; min-height:40px; }
 .scope :global(.flow-ai-tabs button[aria-selected="true"]) { background:var(--lime-3); border-color:var(--lime-8); color:var(--lime-12); }

@@ -362,7 +362,7 @@ test("preview CSS and export canvas use matching position and scale geometry inc
   assert.doesNotMatch(animation, /transform:/);
 });
 
-test("editor wiring uses shared manual mutation, no-op exit, one AI history boundary, and existing storage key", () => {
+test("editor wiring uses shared manual mutation, no-op exit, one AI history boundary, and scoped draft storage", () => {
   const timeline = readFileSync(new URL("./TimelineEditor.tsx", import.meta.url), "utf8");
   assert.match(timeline, /applyClipPositionScaleToProject\(current, clipId, positionScale\)/);
   assert.match(timeline, /if \(next === current\) return;\s*commit\(next, true, \{ type: "SET_CLIP_POSITION_SCALE"/);
@@ -372,12 +372,12 @@ test("editor wiring uses shared manual mutation, no-op exit, one AI history boun
   assert.match(timeline, /transform: clipPositionScaleCss\(activeClip\?\.transform/);
   assert.match(timeline, /recordProjectUndoSnapshot\(historyRef\.current, initialUndoProject\)/);
   const studio = readFileSync(new URL("./editor/EditorStudio.tsx", import.meta.url), "utf8");
-  assert.match(studio, /if \(applied\.project !== editorProject\)\s*\{\s*setEditorAIUndoProject\(cloneProject\(editorProject\)\)/);
+  assert.match(studio, /if \(applied\.project === editorProject \|\| !applied\.applied\.length\) return;\s*setEditorAIUndoProject\(cloneProject\(editorProject\)\)/);
   assert.match(studio, /transform: clip\.transform/);
   assert.match(studio, /const transform = segment\?\.transform \?\? DEFAULT_TRANSFORM/);
   assert.match(studio, /transform: clipPositionScaleCss\(activeMatchSegment\?\.transform \?\? DEFAULT_TRANSFORM\)/);
   assert.match(studio, /clipPositionScaleCanvasOffset\(transform, canvas\.width, canvas\.height\)/);
-  assert.match(studio, /localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio, /localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
 });
 
 test("manual and AI callers share one deterministic speed-aware clip split mutation", () => {

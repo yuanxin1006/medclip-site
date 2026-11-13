@@ -16,6 +16,7 @@ import {
   type TimelineClip,
 } from "./editor-core.ts";
 import type { ConstraintSetV1 } from "./editor-constraints.ts";
+import { visualTimelineClips } from "./editor-local-media.ts";
 import {
   ConstraintEnforcementBlockedError,
   candidateProjectForReorderV1,
@@ -809,30 +810,46 @@ export function createSafeEditorAIContext(
     assets: project.assets
       .filter((asset) => ownedAssetIds.has(asset.id))
       .map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, durationSeconds: asset.durationMs / 1_000 })),
-    clips: project.tracks.flatMap((track) => track.clips
-      .map((clip, index) => ({ clip, index }))
-      .filter(({ clip }) => ownedAssetIds.has(clip.assetId))
-      .sort((left, right) => (
-        left.clip.timelineStartMs - right.clip.timelineStartMs || left.index - right.index
-      ))
-      .map(({ clip }) => clip)
-      .map((clip) => ({
-        id: clip.id,
-        trackId: track.id,
-        assetId: clip.assetId,
-        kind: clip.kind,
-        positionScaleEligible: eligibleVisualClip(track, clip),
-        startSeconds: clip.timelineStartMs / 1_000,
-        endSeconds: clip.timelineEndMs / 1_000,
-        timelineDurationSeconds: (clip.timelineEndMs - clip.timelineStartMs) / 1_000,
-        playbackRate: averageSpeed(clip.speedCurve),
-        ...(eligibleVisualClip(track, clip) ? {
-          x: clip.transform.x,
-          y: clip.transform.y,
-          scale: clip.transform.scale,
-        } : {}),
-      }))),
+    clips: visualTimelineClips(project)
+      .filter(clip => ownedAssetIds.has(clip.assetId))
+      .map((clip) => {
+        const track = project.tracks.find(item => item.id === clip.trackId && item.clips.includes(clip));
+        const eligible = track ? eligibleVisualClip(track, clip) : false;
+        return {
+          id: clip.id,
+          trackId: clip.trackId,
+          assetId: clip.assetId,
+          kind: clip.kind,
+          positionScaleEligible: eligible,
+          startSeconds: clip.timelineStartMs / 1_000,
+          endSeconds: clip.timelineEndMs / 1_000,
+          timelineDurationSeconds: (clip.timelineEndMs - clip.timelineStartMs) / 1_000,
+          playbackRate: averageSpeed(clip.speedCurve),
+          ...(eligible ? { x: clip.transform.x, y: clip.transform.y, scale: clip.transform.scale } : {}),
+        };
+      }),
   });
+}
+
+export function explicitVideoSpeedTarget(requirement: string, project: EditorProject) {
+  const match = /^(?:把|将)?\s*第([一二三四五六七八九十]|\d{1,2})\s*个?\s*视频(?:片段)?\s*(?:设置为|调整为|调为|改为|设为)?\s*(\d+(?:\.\d+)?)\s*倍速[。！!]?$/u.exec(requirement);
+  if (!match) return null;
+  const ordinal = /^\d/.test(match[1]) ? Number(match[1]) : "一二三四五六七八九十".indexOf(match[1]) + 1;
+  const clip = visualTimelineClips(project).filter(item => item.kind === "视频")[ordinal - 1];
+  const rate = Number(match[2]);
+  if (!clip || rate < 0.25 || rate > 4) {
+    throw new AIEditingPlanValidationError("请核对时间线上的视频序号和倍速。支持 0.25 至 4 倍。");
+  }
+  return { clipId: clip.id, rate };
+}
+
+export function verifyExplicitVideoSpeedPlan(plan: EditorAIEditingPlan, target: NonNullable<ReturnType<typeof explicitVideoSpeedTarget>>) {
+  const [action] = plan.actions;
+  if (plan.actions.length === 0) return;
+  if (plan.actions.length !== 1 || action.type !== "SET_CLIP_PLAYBACK_SPEED"
+    || action.targetId !== target.clipId || action.playbackRate !== target.rate) {
+    throw new AIEditingPlanValidationError("返回的建议与指定视频或倍速不一致，时间线未修改。");
+  }
 }
 
 /** Minimal caption-only context for future natural-language caption targeting. */

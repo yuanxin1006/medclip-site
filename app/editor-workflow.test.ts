@@ -16,7 +16,12 @@ test("unowned, invalid and colliding additions are rejected",()=>{
  assert.throws(()=>appendOwnedVisualAsset(p,[{...p.assets[0],durationMs:0}],"a","x"));
 });
 test("explicit media relinking rejects mismatched names, types or durations",()=>{
- const a=project().assets[0];assert.doesNotThrow(()=>validateVisualRelink(a,{name:a.name,kind:a.kind,durationMs:2001}));
+ const a=project().assets[0];const identity={bytes:100,contentSha256:"a".repeat(64)};
+ assert.throws(()=>validateVisualRelink(a,{...a,mediaIdentity:identity}));
+ assert.doesNotThrow(()=>validateVisualRelink(a,{...a,durationMs:2001,mediaIdentity:identity},true));
+ assert.doesNotThrow(()=>validateVisualRelink({...a,mediaIdentity:identity},{...a,name:"renamed.mp4",mediaIdentity:identity}));
+ assert.throws(()=>validateVisualRelink({...a,mediaIdentity:identity},{...a,mediaIdentity:{...identity,contentSha256:"b".repeat(64)}}),/内容/);
+ assert.throws(()=>validateVisualRelink({...a,mediaIdentity:identity},{...a,mediaIdentity:{...identity,bytes:101}}),/大小/);
  assert.throws(()=>validateVisualRelink(a,{name:"other.mp4",kind:a.kind,durationMs:2000}));
  assert.throws(()=>validateVisualRelink(a,{name:a.name,kind:"图片",durationMs:2000}));
  assert.throws(()=>validateVisualRelink(a,{name:a.name,kind:a.kind,durationMs:2200}));

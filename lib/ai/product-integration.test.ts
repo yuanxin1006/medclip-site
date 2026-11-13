@@ -92,7 +92,7 @@ test("editor requirements generate a review and commit only after user confirmat
   assert.match(confirm, /validateRequirementsPlan\(currentRequirementsReview\)/);
   assert.match(confirm, /handleEditorProjectChange\(applied\.project\)/);
   assert.match(editorSource, /currentRequirementsReview[\s\S]*onClick=\{confirmRequirementsPlan\}/);
-  assert.match(editorSource, /requirementsReview\.userId === user\?\.id/);
+  assert.match(editorSource, /requirementsReview\.userId === userId/);
   assert.match(editorSource, /requirementsReview\.project === editorProject/);
   assert.match(editorSource, /requirementsReview\.constraintSet === activeConstraintSet/);
   assert.match(editorRequirementSource, /EXECUTABLE_EDITOR_ACTION_TYPES/);
@@ -106,7 +106,8 @@ test("position scale uses trusted current clip context and one provider-neutral 
   assert.match(editorSource, /activeVisualClips/);
   assert.match(editorSource, /activeVisualClips\.length === 1 \? activeVisualClips\[0\]\.id : undefined/);
   assert.match(editorSource, /createSafeEditorAIContext\([\s\S]*audioDurationMs,[\s\S]*activeVisualClips/);
-  assert.match(editorRequirementSource, /positionScaleEligible: eligibleVisualClip\(track, clip\)/);
+  assert.match(editorRequirementSource, /const eligible = track \? eligibleVisualClip\(track, clip\) : false/);
+  assert.match(editorRequirementSource, /positionScaleEligible: eligible/);
   assert.match(editorRequirementSource, /x: clip\.transform\.x/);
   assert.match(editorRequirementSource, /y: clip\.transform\.y/);
   assert.match(editorRequirementSource, /scale: clip\.transform\.scale/);
@@ -177,7 +178,7 @@ test("manual editor remains available without an AI provider", () => {
   const canGenerateEnd = editorSource.indexOf(";", canGenerateStart);
   const canGenerate = editorSource.slice(canGenerateStart, canGenerateEnd);
   assert.doesNotMatch(canGenerate, /selectedAIProvider|editorAITask/);
-  assert.match(editorSource, /disabled=\{!canGenerate \|\| jobState === "processing"\}/);
+  assert.match(editorSource, /needsInitialTimeline && !canGenerate\) \|\| jobState === "processing"/);
 });
 
 test("missing connections show the AI services CTA and cost notice", () => {

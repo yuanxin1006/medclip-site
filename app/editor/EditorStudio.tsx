@@ -25,6 +25,11 @@ import {renderTimelineExport} from "../editor-export";
 import { decodeVideoSpeechPcm } from "../editor-export-media";
 import {EditorCaptionView} from "../editor-caption-view";
 import {EDITOR_FLOW_STAGES,friendlyEditingError,validateVisualRelink,type EditorFlowStage} from "../editor-workflow";
+import {
+  canRecoverLegacyEditorDraft, editorDraftKey, findLocalMediaReference, identifyLocalMedia, LEGACY_EDITOR_DRAFT_KEY,
+  LEGACY_EDITOR_OWNER_KEY, MAX_EDITOR_MEDIA_BYTES,
+  needsInitialVisualTimeline, sameLocalMedia, visualTimelineClips, type LocalMediaIdentity,
+} from "../editor-local-media";
 import {guardManualTimelineMutationV1} from "../editor-manual-constraint-guard";
 import { CLIP_TEST_ENABLED } from "../editor-clip-evidence";
 import { ClipEvidencePanel } from "../editor-clip-evidence-panel";
@@ -86,6 +91,9 @@ import {
 import {
   applyAIEditingPlan,
   createSafeEditorAIContext,
+  explicitVideoSpeedTarget,
+  parseAIEditingPlan,
+  verifyExplicitVideoSpeedPlan,
   type EditorAIApplyResult,
 } from "../editor-ai-requirements";
 import {
@@ -196,6 +204,7 @@ type Asset = {
   file?: File;
   mime?: string;
   duration?: number;
+  mediaIdentity?: LocalMediaIdentity;
   semanticTopic?: string;
   semanticScore?: number;
 };
@@ -645,12 +654,14 @@ function createEditorProject(
     updatedAt: new Date().toISOString(),
     durationMs: Math.max(1000, Math.round(durationSeconds * 1000)),
     ratio,
+    visualTimelineInitialized: videoClips.length > 0,
     audioSelection: normalizeAudioSelection(audioSelection),
     assets: preparedAssets.map((asset) => ({
       id: asset.id,
       name: asset.name,
       kind: asset.kind,
-      durationMs: Math.round((asset.duration ?? 0) * 1000)
+      durationMs: Math.round((asset.duration ?? 0) * 1000),
+      ...(asset.mediaIdentity ? { mediaIdentity: asset.mediaIdentity } : {}),
     })),
     tracks: [
       { id: "audio-main", type: "audio", name: "主音频", clips: [], locked: true },
@@ -712,6 +723,12 @@ function matchSegmentSourceTime(segment: MatchSegment, seconds: number) {
 }
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  if (loading) return <main className="app-shell" role="status">正在恢复剪辑工作区…</main>;
+  return <EditorWorkspace key={editorDraftKey(user?.id ?? null)} userId={user?.id ?? null} />;
+}
+
+function EditorWorkspace({ userId }: { userId: string | null }) {
   const mediaInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
   const subtitleInput = useRef<HTMLInputElement>(null);
@@ -747,6 +764,13 @@ export default function Home() {
     reject: (error: Error) => void;
   }>());
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [excludedInitialAssetIds, setExcludedInitialAssetIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [mediaImportBusy, setMediaImportBusy] = useState(false);
+  const [legacyRelink, setLegacyRelink] = useState<{ assetId: string; file: File; preview: string } | null>(null);
+  const mediaImportLock = useRef(false);
+  const mediaLifetime = useRef(false);
+  const importedObjectUrls = useRef(new Set<string>());
+  useEffect(() => () => { if (legacyRelink) URL.revokeObjectURL(legacyRelink.preview); }, [legacyRelink]);
   const [mediaImportError, setMediaImportError] = useState("");
   const [audios, setAudios] = useState<AudioAsset[]>([]);
   // With no explicit choice, a narration upload retains the legacy workflow.
@@ -796,10 +820,10 @@ export default function Home() {
   const [requirements, setRequirements] = useState("");
   const [requirementDraft, setRequirementDraft] = useState("");
   const [requirementDialogOpen, setRequirementDialogOpen] = useState(false);
-  const { user, loading: authLoading } = useAuth();
   const [selectedAIProvider, setSelectedAIProvider] = useState<AIProviderId | null>(null);
   const [editorAITaskBusy, setEditorAITaskBusy] = useState(false);
   const editorAITaskInFlight = useRef(false);
+  const editorAITaskViewVersion = useRef(0);
   const [editorAITaskError, setEditorAITaskError] = useState<string | null>(null);
   const [requirementsReview, setRequirementsReview] = useState<EditorRequirementsReview | null>(null);
   const [editorAIApplyResult, setEditorAIApplyResult] = useState<EditorAIApplyResult | null>(null);
@@ -823,6 +847,8 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState("");
   const [editorProject, setEditorProject] = useState<EditorProject | null>(null);
+  const latestMediaState = useRef({ editorProject, assets });
+  useEffect(() => { latestMediaState.current = { editorProject, assets }; }, [editorProject, assets]);
   const [secondaryAudioSources, setSecondaryAudioSources] = useState<Record<string, string>>({});
   const [editorAIUndoProjects, setEditorAIUndoProjects] = useState<EditorProject[]>([]);
   const setEditorAIUndoProject = (snapshot: EditorProject | null) => {
@@ -1069,7 +1095,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const restored = parseEditorProject(window.localStorage.getItem("medclip-editor-draft-v1"));
+    mediaLifetime.current = true;
+    const urls = importedObjectUrls.current;
+    return () => {
+      mediaLifetime.current = false;
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
+
+  const restoreDraft = (restored: EditorProject) => {
     if (!restored) return;
     if (ACCEPTANCE_INPUT_HYDRATION_BUILD_ENABLED && !acceptanceInputHydratedRef.current) {
       acceptanceInputHydratedRef.current = true;
@@ -1095,6 +1130,12 @@ export default function Home() {
     }
     setEditorAIUndoProject(null);
     setEditorProject(restored);
+    setAssets(restored.assets.map(asset => ({
+      id: asset.id, name: asset.name, kind: asset.kind,
+      duration: asset.durationMs / 1000,
+      size: asset.mediaIdentity?.bytes ? formatSize(asset.mediaIdentity.bytes) : "",
+      mediaIdentity: asset.mediaIdentity,
+    })));
     // Restore the draft in the background, but always land on the main studio.
     // The user can explicitly enter the full-screen timeline with “继续精剪”.
     setEditorOpen(false);
@@ -1118,13 +1159,41 @@ export default function Home() {
     }
     setJobState("done");
     setProgress(100);
-    setNotice("已恢复上次工程结构；如需预览本地素材，请重新上传并在编辑器中替换关联");
-  }, []);
+    setNotice("已恢复剪辑工程。请在添加素材中重新关联本地文件。");
+  };
+
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [legacyDraftAvailable, setLegacyDraftAvailable] = useState(false);
+  const storageKey = editorDraftKey(userId);
+  useEffect(() => {
+    const restored = parseEditorProject(window.localStorage.getItem(storageKey));
+    if (restored) restoreDraft(restored);
+    else {
+      setLegacyDraftAvailable(Boolean(userId && window.localStorage.getItem(LEGACY_EDITOR_DRAFT_KEY))
+        && canRecoverLegacyEditorDraft(window.localStorage, storageKey));
+    }
+    setDraftLoaded(true);
+    // Account changes remount the workspace, including its File and URL references.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!editorProject) return;
-    window.localStorage.setItem("medclip-editor-draft-v1", JSON.stringify(editorProject));
-  }, [editorProject]);
+    if (draftLoaded && editorProject) {
+      window.localStorage.setItem(storageKey, JSON.stringify(editorProject));
+    }
+  }, [draftLoaded, editorProject, storageKey]);
+
+  const recoverLegacyDraft = () => {
+    if (!userId || editorProject || assets.length || !canRecoverLegacyEditorDraft(window.localStorage, storageKey)) return;
+    const restored = parseEditorProject(window.localStorage.getItem(LEGACY_EDITOR_DRAFT_KEY));
+    if (!restored) {
+      setMediaImportError("旧工程记录无法读取，原始记录已保留。");
+      return;
+    }
+    window.localStorage.setItem(LEGACY_EDITOR_OWNER_KEY, storageKey);
+    setLegacyDraftAvailable(false);
+    restoreDraft(restored);
+  };
 
   useEffect(() => {
     setCaptionVisibleCount(60);
@@ -1500,8 +1569,10 @@ export default function Home() {
     setPreviewMediaError("");
   }, [previewAsset?.id]);
 
+  const initialVisualAssets = assets.filter(asset => asset.preview && !excludedInitialAssetIds.has(asset.id));
+  const needsInitialTimeline = needsInitialVisualTimeline(editorProject, jobState === "done");
   const canGenerate =
-    assets.length > 0 &&
+    initialVisualAssets.length > 0 && !mediaImportBusy &&
     (audioMode === "external" ? audioDuration > 0 : visualDuration > 0 || assets.some((asset) => asset.kind === "视频" && asset.file)) &&
     (!externalEnabled || !audios.length || (selectionValidation.valid && !audioSelectionInputError)) &&
     (!durationMismatch || durationMismatchConfirmed) &&
@@ -1634,71 +1705,93 @@ export default function Home() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const addFiles = async (files: FileList | File[]) => {
-    const incoming = Array.from(files);
-    if (!incoming.length) return;
-    const results = await Promise.all(incoming.map(async (file) => {
-      const isVideo = file.type.startsWith("video/");
-      if (!isVideo && !file.type.startsWith("image/")) return null;
-      const preview = URL.createObjectURL(file);
-      const duration = isVideo ? await readMediaDuration(preview, "video") : 4;
-      if (!duration) {
-        URL.revokeObjectURL(preview);
-        return null;
+  const importVisualFiles = async (files: File[], target?: { assetId: string; legacyConfirmed: boolean }) => {
+    if (!draftLoaded || !files.length || mediaImportLock.current) return;
+    mediaImportLock.current = true;
+    setMediaImportBusy(true);
+    setMediaImportError("");
+    const projectId = editorProject?.id;
+    const errors: string[] = [];
+    let changed = false;
+    let linkedCount = 0;
+    try {
+      for (const file of files) {
+        let preview: string | undefined;
+        try {
+          const kind = file.type.startsWith("video/") ? "视频"
+            : file.type.startsWith("image/") ? "图片" : null;
+          if (!kind || !file.size || file.size > MAX_EDITOR_MEDIA_BYTES) throw new Error("请选择不超过 2GB 的视频或图片。");
+          preview = URL.createObjectURL(file);
+          const duration = kind === "视频" ? await readMediaDuration(preview, "video") : 4;
+          if (!duration) throw new Error("当前浏览器不支持或无法读取，请使用 MP4（H.264/AAC）、WebM 或受支持的图片。");
+          const mediaIdentity = await identifyLocalMedia(file);
+          if (!mediaLifetime.current || latestMediaState.current.editorProject?.id !== projectId) return;
+          const current = latestMediaState.current;
+          const actual = { name: file.name, kind, durationMs: Math.round(duration * 1000), mediaIdentity } as const;
+          const expected = target
+            ? current.editorProject?.assets.find(asset => asset.id === target.assetId)
+            : findLocalMediaReference(current.editorProject?.assets ?? [], actual);
+          if (target && !expected) throw new Error("当前工程已没有这条素材记录。");
+          if (expected) {
+            validateVisualRelink(expected, actual, target?.legacyConfirmed);
+            const sourceOut = current.editorProject ? visualTimelineClips(current.editorProject)
+              .filter(clip => clip.assetId === expected.id)
+              .reduce((end, clip) => Math.max(end, clip.sourceOutMs), 0) : 0;
+            if (actual.durationMs + 50 < sourceOut) throw new Error("原有片段超出此文件时长，无法关联。");
+          }
+          if (!expected && current.assets.some(asset => !asset.preview && asset.kind === kind && asset.name === file.name)) {
+            throw new Error("该名称对应待关联素材，但内容无法匹配。请在待关联列表中选择原文件。");
+          }
+          const existing = current.assets.find(asset => expected ? asset.id === expected.id
+            : asset.kind === kind && sameLocalMedia(asset.mediaIdentity, mediaIdentity));
+          if (existing?.preview) continue;
+          if (!existing && current.assets.length >= 30) throw new Error("素材库最多保留 30 项。");
+          const asset: Asset = {
+            id: expected?.id ?? existing?.id ?? crypto.randomUUID(),
+            name: expected?.name ?? existing?.name ?? file.name,
+            kind, size: formatSize(file.size), preview, file, mime: file.type, duration, mediaIdentity,
+          };
+          const nextAssets = existing ? current.assets.map(item => item.id === asset.id ? asset : item) : [...current.assets, asset];
+          let nextProject = current.editorProject;
+          if (nextProject && expected && !expected.mediaIdentity) {
+            // Upgrade an explicitly confirmed legacy binding without changing any timeline references.
+            nextProject = { ...nextProject, assets: nextProject.assets.map(item => item.id === expected.id
+              ? { ...item, mediaIdentity } : item) };
+          }
+          latestMediaState.current = { assets: nextAssets, editorProject: nextProject };
+          setAssets(nextAssets);
+          if (nextProject !== current.editorProject) setEditorProject(nextProject);
+          importedObjectUrls.current.add(preview);
+          preview = undefined;
+          changed = true;
+          if (expected) linkedCount++;
+        } catch (error) {
+          errors.push(`${file.name}：${error instanceof Error ? error.message : "无法读取文件。"}`);
+        } finally {
+          if (preview) URL.revokeObjectURL(preview);
+        }
       }
-      return {
-        id: crypto.randomUUID(),
-        name: file.name,
-        kind: isVideo ? ("视频" as const) : ("图片" as const),
-        size: formatSize(file.size),
-        preview,
-        file,
-        mime: file.type,
-        duration,
-      };
-    }));
-    const rejected = incoming.filter((_, index) => results[index] === null);
-    setMediaImportError(rejected.length
-      ? `当前浏览器不支持或无法读取：${rejected.map((file) => file.name).join("、")}。请使用 MP4（H.264/AAC）、WebM（VP8/VP9 + Opus）或 JPG、PNG、WebP。`
-      : "");
-    const next = results.filter((asset) => asset !== null);
-    if (!next.length) return;
-    if (transcriptionBusy) stopTranscription(false);
-    setAssets((current) => [...current, ...next].slice(0, 30));
-    setMatchSegments([]);
-    setMatchingState("idle");
-    setMatchingProgress(0);
-    clearRenderedVideo();
-    setJobState("idle");
-    setProgress(0);
-  };
-
-  const relinkVisualFile=async(assetId:string,file:File)=>{
-    const expected=editorProject?.assets.find(a=>a.id===assetId);if(!expected)return;
-    const preview=URL.createObjectURL(file);
-    try{
-      const kind=file.type.startsWith("video/")?"视频":file.type.startsWith("image/")?"图片":undefined;
-      if(!kind)throw new Error("请选择视频或图片文件。");
-      const duration=kind==="视频"?await readMediaDuration(preview,"video"):4;
-      if (!duration) throw new Error("当前浏览器无法播放这个视频，请使用 MP4（H.264/AAC）或浏览器支持的 WebM。");
-      validateVisualRelink(expected,{name:file.name,kind,durationMs:Math.round((duration??0)*1000)});
-      if(transcriptionBusy)stopTranscription(false);
-      videoAnalysisAbortRef.current.get(assetId)?.abort();videoAnalysisAbortRef.current.delete(assetId);
-      semanticAnalysisCacheRef.current.invalidateAsset(assetId);visualInsightCacheRef.current.delete(assetId);
-      setAssets(current=>[...current.filter(a=>a.id!==assetId),{id:assetId,name:expected.name,kind,size:formatSize(file.size),preview,file,mime:file.type,duration}]);
-      clearRenderedVideo();setNotice("已恢复素材关联，请核对画面。原有剪辑位置和字幕未改变。");
-    }catch(error){URL.revokeObjectURL(preview);setNotice(error instanceof Error?error.message:"无法关联该文件。");}
+      if (!mediaLifetime.current) return;
+      setMediaImportError(errors.join(" "));
+      if (changed) {
+        clearRenderedVideo();
+        if (linkedCount) setNotice(`已恢复 ${linkedCount} 项素材关联，原有剪辑和字幕已保留。`);
+      }
+    } finally {
+      mediaImportLock.current = false;
+      if (mediaLifetime.current) setMediaImportBusy(false);
+    }
   };
 
   const handleMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) void addFiles(event.target.files);
+    if (event.target.files) void importVisualFiles(Array.from(event.target.files));
     event.target.value = "";
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);
-    void addFiles(event.dataTransfer.files);
+    void importVisualFiles(Array.from(event.dataTransfer.files));
   };
 
   const handleAudio = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1836,7 +1929,15 @@ export default function Home() {
     visualInsightCacheRef.current.delete(id);
     setAssets((current) => {
       const item = current.find((asset) => asset.id === id);
-      if (item?.preview) URL.revokeObjectURL(item.preview);
+      if (item?.preview) {
+        URL.revokeObjectURL(item.preview);
+        importedObjectUrls.current.delete(item.preview);
+      }
+      if (editorProject?.assets.some(asset => asset.id === id)) {
+        return current.map(asset => asset.id === id ? {
+          ...asset, preview: undefined, file: undefined, semanticTopic: undefined, semanticScore: undefined,
+        } : asset);
+      }
       return current.filter((asset) => asset.id !== id);
     });
     setMatchSegments([]);
@@ -1845,6 +1946,7 @@ export default function Home() {
   };
 
   const loadDemo = () => {
+    if (editorProject || mediaImportBusy) return;
     videoAnalysisAbortRef.current.forEach((controller) => controller.abort());
     videoAnalysisAbortRef.current.clear();
     semanticAnalysisCacheRef.current.clear();
@@ -2072,13 +2174,13 @@ export default function Home() {
     if (activeConstraintSet?.activeConstraints.length) {
       throw new TranscriptionFailure("result-format", "preparing-audio", "当前工程有已确认的保护约束，请先解除保护再重新识别字幕。");
     }
-    const prepared = assets;
+    const prepared = assets.filter(asset => asset.preview && !excludedInitialAssetIds.has(asset.id));
     assertCurrent();
     const visualLength = prepared.reduce((total, asset) => total + (asset.duration ?? 0), 0);
     const initialDuration = durationMode === "custom" ? Math.min(targetDuration, visualLength) : visualLength;
-    const project = jobState === "done" && editorProject
+    const project = editorProject && visualTimelineClips(editorProject).length
       ? editorProject
-      : createEditorProject(sourceOrderPlan(prepared, initialDuration), [], prepared, audioSelection, initialDuration, ratio);
+      : createEditorProject(sourceOrderPlan(prepared, initialDuration), [], assets, audioSelection, initialDuration, ratio);
     const clips = project.tracks.filter((track) => track.type === "video" || track.type === "broll")
       .flatMap((track) => track.clips);
     const segments = projectToMatchSegments(project);
@@ -2087,7 +2189,7 @@ export default function Home() {
     const noTrack: string[] = [];
     let silentTracks = 0;
     for (const assetId of assetIds) {
-      const asset = prepared.find((item) => item.id === assetId);
+      const asset = assets.find((item) => item.id === assetId);
       if (!asset) throw new Error("请重新关联时间线中的视频素材后再识别。");
       setTranscriptionStage("preparing-audio");
       const extraction = videoAudioQueueRef.current.then(() => {
@@ -2857,7 +2959,12 @@ export default function Home() {
     return plan;
   };
 
-  const startJob = async (manualOnly=false) => {
+  const startJob = async (manualOnly = false, rebuild = false) => {
+    if (manualOnly && editorProject && !needsInitialTimeline && !rebuild) {
+      setFlowStage("finish");
+      setEditorOpen(true);
+      return;
+    }
     if (!canGenerate) {
       setNotice("请检查素材、音频模式及素材使用权");
       return;
@@ -2871,7 +2978,7 @@ export default function Home() {
       previewAudioRef.current?.pause();
       pauseSelectionPreview();
       clearRenderedVideo();
-      const preparedAssets = assets;
+      const preparedAssets = initialVisualAssets;
       let cues = captionRecords;
       if (!manualOnly && audioMode === "external" && subtitleSource === "auto" && !cues.length && transcriptionState !== "error") {
         try {
@@ -2882,7 +2989,8 @@ export default function Home() {
         }
       }
       const sourceDuration = preparedAssets.reduce((total, asset) => total + (asset.duration ?? 0), 0);
-      const projectDuration = audioMode === "external" ? targetDuration
+      const projectDuration = manualOnly && needsInitialTimeline ? Math.max(1, sourceDuration)
+        : audioMode === "external" ? targetDuration
         : Math.max(1, durationMode === "custom" ? Math.min(targetDuration, sourceDuration) : sourceDuration);
       const targetDurationMs = Math.round(projectDuration * 1000);
       const timelineCues = cues
@@ -2897,11 +3005,23 @@ export default function Home() {
       let nextProject = createEditorProject(
         plan,
         audioMode === "external" ? timelineCues.filter((cue) => !cue.videoClipId) : timelineCues,
-        preparedAssets,
+        assets,
         audioSelection,
         projectDuration,
         ratio, fillMode === "居中留黑边" ? "contain" : "cover"
       );
+      if (manualOnly && editorProject && needsInitialTimeline) {
+        nextProject = {
+          ...editorProject,
+          assets: nextProject.assets,
+          tracks: editorProject.tracks.some(track => track.id === "video-main")
+            ? editorProject.tracks.map(track => track.id === "video-main" ? { ...track, clips: nextProject.tracks[1].clips } : track)
+            : [...editorProject.tracks, nextProject.tracks[1]],
+          durationMs: Math.max(editorProject.durationMs, nextProject.durationMs),
+          visualTimelineInitialized: true,
+          updatedAt: nextProject.updatedAt,
+        };
+      }
       if (editorProject && audioMode !== "external") nextProject = remapVideoCaptions(editorProject, nextProject);
       setEditorAIUndoProject(null);
       setEditorProject(nextProject);
@@ -4186,7 +4306,7 @@ export default function Home() {
     review.result.result.data,
     {
       project: review.project,
-      ownedAssetIds: new Set(review.assets.map((asset) => asset.id)),
+      ownedAssetIds: new Set(review.assets.filter(asset => asset.preview && asset.file).map(asset => asset.id)),
       audioSourceDurationMs: review.audioDurationMs,
       ...(review.constraintSet ? { constraintSet: review.constraintSet } : {}),
       ...(review.intentSession.proposalContext ? { constraintContext: {
@@ -4199,7 +4319,7 @@ export default function Home() {
   );
 
   const currentRequirementsReview = requirementsReview
-    && !authLoading && requirementsReview.userId === user?.id
+    && requirementsReview.userId === userId
     && requirementsReview.provider === selectedAIProvider
     && requirementsReview.project === editorProject
     && requirementsReview.assets === assets
@@ -4215,11 +4335,11 @@ export default function Home() {
   }, [currentRequirementsReview, requirementsReview]);
 
   const runEditorTextTask = async () => {
-    if (editorAITaskInFlight.current) return;
+    if (editorAITaskInFlight.current || mediaImportBusy) return;
     setRequirementsReview(null);
     setEditorAIApplyResult(null);
     setEditorAITaskError(null);
-    if (authLoading || !user) {
+    if (!userId) {
       setEditorAITaskError("请先登录后再使用 AI 功能。");
       return;
     }
@@ -4240,7 +4360,7 @@ export default function Home() {
       setEditorAITaskError("请先确认当前保护范围并完成约束决策。");
       return;
     }
-    const ownedAssetIds = new Set(assets.map((asset) => asset.id));
+    const ownedAssetIds = new Set(assets.filter(asset => asset.preview && asset.file).map(asset => asset.id));
     const readiness = inspectEditorVisualContext(editorProject, ownedAssetIds);
     if (readiness.status !== "READY") {
       setEditorAITaskError(editorVisualContextMessage(readiness.status));
@@ -4254,8 +4374,17 @@ export default function Home() {
         && previewElapsed * 1_000 < clip.timelineEndMs
         && assets.some((asset) => asset.id === clip.assetId && asset.kind === clip.kind)
       )));
+    let speedTarget: ReturnType<typeof explicitVideoSpeedTarget>;
+    try {
+      speedTarget = explicitVideoSpeedTarget(editingRequirement, editorProject);
+    } catch {
+      setEditorAITaskError("请核对时间线上的视频序号和倍速。支持 0.25 至 4 倍。");
+      return;
+    }
     const input = {
-      editingRequirement,
+      editingRequirement: speedTarget
+        ? `将时间线中 ID 为 ${speedTarget.clipId} 的视频片段设置为 ${speedTarget.rate} 倍速。只修改这一个片段。`
+        : editingRequirement,
       editorContext: createSafeEditorAIContext(
         editorProject,
         ownedAssetIds,
@@ -4265,22 +4394,25 @@ export default function Home() {
     };
 
     editorAITaskInFlight.current = true;
+    const viewVersion = editorAITaskViewVersion.current;
     setEditorAITaskBusy(true);
     try {
       const result = await runAITask({ task: "editor.requirements_parse", provider: selectedAIProvider, input });
+      if (viewVersion !== editorAITaskViewVersion.current) return;
       if (result.task !== "editor.requirements_parse" || result.provider !== selectedAIProvider
         || result.result.capability !== "TEXT_REASONING") {
         throw new Error("Unexpected editing task response.");
       }
+      if (speedTarget) verifyExplicitVideoSpeedPlan(parseAIEditingPlan(result.result.data), speedTarget);
       const review: EditorRequirementsReview = {
         result, operationCount: 0, project: editorProject, assets, audioSelection, audioDurationMs,
-        requirement: editingRequirement, userId: user.id, provider: selectedAIProvider,
+        requirement: editingRequirement, userId, provider: selectedAIProvider,
         constraintSet: activeConstraintSet, intentSession: creativeIntentSession,
       };
       const candidate = validateRequirementsPlan(review);
       setRequirementsReview({ ...review, operationCount: candidate.project === editorProject ? 0 : candidate.applied.length });
     } catch (error) {
-      setEditorAITaskError(editorRequirementsError(error));
+      if (viewVersion === editorAITaskViewVersion.current) setEditorAITaskError(editorRequirementsError(error));
     } finally {
       editorAITaskInFlight.current = false;
       setEditorAITaskBusy(false);
@@ -4345,7 +4477,15 @@ export default function Home() {
     evaluation: editorEvaluation, repairProposal: editorRepairProposal, repairReview: editorRepairReview,
   }) : Object.freeze([]), [editorProject, creativeIntentSession.intent, creativeIntentSession.feasibilityReport, explanationConstraintSet, protectionAnnotations, blockedExplanationResult, collaborativeOptionSet, selectedCollaborativeOptionId, editorProposal, reviewedEvidenceProposal, editorProposalReview, reviewedPlanEvidence, editorEvaluation, editorRepairProposal, editorRepairReview]);
 
-  const goFlow=(next:EditorFlowStage)=>{setPreviewPlaying(false);previewVideoRef.current?.pause();previewAudioRef.current?.pause();pauseSelectionPreview();setFlowStage(next);};
+  const goFlow = (next: EditorFlowStage) => {
+    if (next !== flowStage) editorAITaskViewVersion.current++;
+    setEditorAITaskError(null);
+    setPreviewPlaying(false);
+    previewVideoRef.current?.pause();
+    previewAudioRef.current?.pause();
+    pauseSelectionPreview();
+    setFlowStage(next);
+  };
   const flowStatus:Record<EditorFlowStage,string>={materials:assets.length?assets.length+" 项画面素材":"先添加视频或图片",sound:audioModes[audioMode]+(subtitleCues.length?"，"+subtitleCues.length+" 句字幕":"，字幕可跳过"),assistant:editorProposal?"有建议待审核":reviewedPlanEvidence?"已审核":"按需使用，可跳过",finish:renderState==="ready"?"成片已生成":editorProject?"时间线已建立":"待建立时间线"};
   return (
     <main className={`app-shell editor-studio ${editorOpen ? "editor-active" : ""}`}>
@@ -4356,7 +4496,7 @@ export default function Home() {
             <h1>视频剪辑</h1>
             
           </div>
-          <button className="quiet-button" onClick={loadDemo} type="button">
+          <button className="quiet-button" disabled={Boolean(editorProject) || mediaImportBusy} onClick={loadDemo} type="button">
             载入演示
           </button>
         </div>
@@ -4379,6 +4519,7 @@ export default function Home() {
             accept="video/mp4,video/webm,video/quicktime,image/jpeg,image/png,image/webp"
             hidden
             multiple
+            disabled={!draftLoaded || mediaImportBusy}
             onChange={handleMediaChange}
             ref={mediaInput}
             type="file"
@@ -4401,6 +4542,13 @@ export default function Home() {
             <span>或点击选择文件，单个文件最大 2GB</span>
             <small>支持浏览器可播放的 MP4、WebM、MOV，以及 JPG、PNG、WebP</small>
           </div>
+          {legacyDraftAvailable && !editorProject && !assets.length && (
+            <div className="flow-relink">
+              <p>此浏览器有旧版剪辑草稿。请确认它是你的工程，再恢复到当前工作区。</p>
+              <button type="button" className="platform-secondary-button" onClick={recoverLegacyDraft}>恢复此浏览器的旧工程</button>
+            </div>
+          )}
+          {mediaImportBusy && <p role="status">正在读取文件并核对素材内容…</p>}
           {mediaImportError && <p role="alert" className="asset-alert">{mediaImportError}</p>}
           {assets.length > 0 && (
             <div className="asset-list">
@@ -4411,6 +4559,7 @@ export default function Home() {
                   </span>
                   <div className="asset-name">
                     <b>{asset.name}</b><small className="asset-timeline-state">{editorProject?.tracks.some(t=>t.clips.some(c=>c.assetId===asset.id))?"已在时间线":"未加入时间线"}</small>
+                    <small className="asset-link-state">{asset.preview ? "本地文件已关联" : "本地文件待关联"}</small>
                     <span>
                       {asset.kind}，{asset.size}
                       {asset.duration ? `，${formatDuration(asset.duration)}` : ""}
@@ -4422,13 +4571,75 @@ export default function Home() {
                       </small>
                     )}
                   </div>
+                  {needsInitialTimeline && asset.preview && (
+                    <label>
+                      <input type="checkbox" aria-label={`加入初始时间线 ${asset.name}`}
+                        checked={!excludedInitialAssetIds.has(asset.id)}
+                        onChange={event => {
+                          const included = event.target.checked;
+                          setExcludedInitialAssetIds(current => {
+                            const next = new Set(current);
+                            if (included) next.delete(asset.id);
+                            else next.add(asset.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      加入初始时间线
+                    </label>
+                  )}
                   <span className="asset-order">{String(index + 1).padStart(2, "0")}</span>
-                  <button aria-label={`移除 ${asset.name}`} className="remove-button" onClick={() => removeAsset(asset.id)} type="button">×</button>
+                  <button aria-label={`移除 ${asset.name}`} className="remove-button"
+                    disabled={mediaImportBusy || !asset.preview && Boolean(editorProject?.assets.some(item => item.id === asset.id))}
+                    onClick={() => removeAsset(asset.id)} type="button">×</button>
                 </div>
               ))}
               <button className="add-more" onClick={() => mediaInput.current?.click()} type="button">＋ 继续添加素材</button>
             </div>
-          )}{editorProject&&editorProject.assets.some(a=>!assets.some(r=>r.id===a.id&&r.preview))&&<section className="flow-relink" aria-label="恢复素材关联"><h3>工程已恢复，文件待关联</h3><p>重新选择原文件即可恢复播放，剪辑位置和字幕不会改变。旧工程无法自动核实文件内容，请核对画面。</p>{editorProject.assets.filter(a=>!assets.some(r=>r.id===a.id&&r.preview)).map(a=><label key={a.id}><span>{a.name}</span><input aria-label={"重新关联 "+a.name} type="file" accept={a.kind==="视频"?"video/*":"image/*"} onChange={e=>{const file=e.target.files?.[0];if(file)void relinkVisualFile(a.id,file);e.target.value="";}}/></label>)}</section>}<div className="panel-heading compact">
+          )}
+          {editorProject && editorProject.assets.some(asset => !assets.some(item => item.id === asset.id && item.preview)) && (
+            <section className="flow-relink" aria-label="恢复素材关联">
+              <h3>工程已恢复，文件待关联</h3>
+              <p>可在上方批量选择原文件，或在这里逐项关联。剪辑位置和字幕会保留。</p>
+              {editorProject.assets.filter(asset => !assets.some(item => item.id === asset.id && item.preview)).map(asset => (
+                <label key={asset.id}>
+                  <span>{asset.name}</span>
+                  <input aria-label={`重新关联 ${asset.name}`} type="file"
+                    accept={asset.kind === "视频" ? "video/*" : "image/*"} disabled={mediaImportBusy}
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!file) return;
+                      if (asset.mediaIdentity) {
+                        void importVisualFiles([file], { assetId: asset.id, legacyConfirmed: false });
+                      } else if (file.name !== asset.name || (asset.kind === "视频" ? !file.type.startsWith("video/") : !file.type.startsWith("image/"))) {
+                        setMediaImportError("文件名或类型与旧工程记录不一致。");
+                      } else {
+                        setMediaImportError("");
+                        setLegacyRelink({ assetId: asset.id, file, preview: URL.createObjectURL(file) });
+                      }
+                    }}
+                  />
+                </label>
+              ))}
+              {legacyRelink && (
+                <div aria-label="核对旧工程原文件">
+                  <p>旧工程没有内容指纹。请预览并核对这是原始素材，再确认关联。</p>
+                  {legacyRelink.file.type.startsWith("video/") ? <video src={legacyRelink.preview} controls preload="metadata" />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    : <img src={legacyRelink.preview} alt="待核对的原始图片" />}
+                  <button type="button" className="platform-secondary-button" onClick={() => setLegacyRelink(null)}>取消关联</button>
+                  <button type="button" className="platform-secondary-button" disabled={mediaImportBusy}
+                    onClick={() => {
+                      const { assetId, file } = legacyRelink;
+                      setLegacyRelink(null);
+                      void importVisualFiles([file], { assetId, legacyConfirmed: true });
+                    }}>确认是原始文件</button>
+                </div>
+              )}
+            </section>
+          )}
+          <div className="panel-heading compact">
             <div>
               
               <div>
@@ -4481,7 +4692,18 @@ export default function Home() {
           )}<label className="consent">
             <input checked={consent} onChange={(event) => setConsent(event.target.checked)} type="checkbox" />
             <span>我确认拥有上传素材和音频的使用权，内容不涉及患者隐私或未经授权的个人信息。</span>
-          </label><div className="flow-material-actions">{editorProject&&<p className="flow-note">已有时间线。添加文件不会自动替换原有片段。</p>}<button className="flow-primary" type="button" disabled={!canGenerate || jobState === "processing"} onClick={()=>editorProject?goFlow("finish"):void startJob(true)}>{startingJob?"正在准备素材…":editorProject?"前往精剪与导出":"开始手动剪辑"}</button>{!canGenerate&&<small className="flow-disabled-reason">{!assets.some(a=>a.preview)?"先添加视频或图片。":!consent?"请先确认素材使用权。":audioMode==="external"&&!audios.length?"独立音频模式需要声音文件，可在声音设置中改用视频原声。":"请在声音设置中检查音频区间与时长。"}</small>}<button className="flow-link" type="button" onClick={()=>goFlow("sound")}>设置声音与字幕（可选）</button></div></div></section><section className="editor-flow-stage" data-editor-stage="sound" hidden={flowStage!=="sound"} aria-labelledby="flow-sound"><header className="flow-stage-heading"><span>02</span><div><h2 id="flow-sound">声音与字幕</h2><p>可选，可直接使用视频原声，字幕也可以跳过。</p></div></header><div className="panel flow-card"><h3>声音来源</h3><div className="field audio-source-field">
+          </label><div className="flow-material-actions">
+            {!needsInitialTimeline && <p className="flow-note">已有时间线。继续精剪会保留当前片段。</p>}
+            <button className="flow-primary" type="button"
+              disabled={!draftLoaded || mediaImportBusy || (needsInitialTimeline && !canGenerate) || jobState === "processing"}
+              onClick={() => void startJob(true)}
+            >{startingJob ? "正在准备素材…" : needsInitialTimeline ? "开始手动剪辑" : "继续精剪"}</button>
+            {needsInitialTimeline && !canGenerate && <small className="flow-disabled-reason">
+              {!initialVisualAssets.length ? "请选择要加入初始时间线的素材。"
+                : !consent ? "请先确认素材使用权。"
+                : audioMode === "external" && !audios.length ? "独立音频模式需要声音文件，可在声音设置中改用视频原声。"
+                : "请在声音设置中检查音频区间与时长。"}
+            </small>}<button className="flow-link" type="button" onClick={()=>goFlow("sound")}>设置声音与字幕（可选）</button></div></div></section><section className="editor-flow-stage" data-editor-stage="sound" hidden={flowStage!=="sound"} aria-labelledby="flow-sound"><header className="flow-stage-heading"><span>02</span><div><h2 id="flow-sound">声音与字幕</h2><p>可选，可直接使用视频原声，字幕也可以跳过。</p></div></header><div className="panel flow-card"><h3>声音来源</h3><div className="field audio-source-field">
             <label htmlFor="editor-audio-mode">音频模式</label>
             <select className="editor-audio-mode" id="editor-audio-mode" value={audioMode} disabled={renderState === "rendering" || jobState === "processing" || startingJob || transcriptionBusy} onChange={(event) => {
               if (speechProtected && event.target.value !== "original") {
@@ -5300,7 +5522,7 @@ export default function Home() {
 <EditorDecisionExplanationPanel
             explanations={decisionExplanations}
             selectedProtectionClauseId={selectedProtectionClauseId}
-          /></div></section><section className="editor-flow-stage" data-editor-stage="finish" hidden={flowStage!=="finish"} aria-labelledby="flow-finish"><header className="flow-stage-heading"><span>04</span><div><h2 id="flow-finish">精剪与导出</h2><p>检查画面、声音和字幕，再导出成片。</p></div></header><div className="flow-finish-actions">{editorProject?<button className="flow-primary" type="button" onClick={()=>setEditorOpen(true)}>打开精剪</button>:<button className="flow-primary" type="button" onClick={()=>goFlow("materials")}>先添加素材并建立时间线</button>}<small>{editorProject?"在画布预览，在时间线选择对象，在属性中调整。":"仅上传视频即可开始，声音和字幕都可稍后设置。"}</small></div><div className="flow-finish-grid"><section className="result-section" id="workflow">
+          /></div></section><section className="editor-flow-stage" data-editor-stage="finish" hidden={flowStage!=="finish"} aria-labelledby="flow-finish"><header className="flow-stage-heading"><span>04</span><div><h2 id="flow-finish">精剪与导出</h2><p>检查画面、声音和字幕，再导出成片。</p></div></header><div className="flow-finish-actions">{editorProject && !needsInitialTimeline?<button className="flow-primary" type="button" onClick={() => void startJob(true)}>打开精剪</button>:<button className="flow-primary" type="button" onClick={()=>goFlow("materials")}>先添加素材并建立时间线</button>}<small>{editorProject?"在画布预览，在时间线选择对象，在属性中调整。":"仅上传视频即可开始，声音和字幕都可稍后设置。"}</small></div><div className="flow-finish-grid"><section className="result-section" id="workflow">
         <div className="result-heading">
           <div>
             <h3>当前预览</h3>
@@ -5634,7 +5856,7 @@ export default function Home() {
                 </div>
               </div>
             )}
-          </div></section><details className="advanced-settings"><summary>重新建立时间线</summary><p>会按当前素材重新排列画面；现有字幕时间码保留，请先确认。</p><button type="button" className="flow-secondary" disabled={!canGenerate||startingJob||Boolean(activeConstraintSet)} onClick={()=>void startJob(true)}>按当前素材重新建立</button>{activeConstraintSet&&<small>当前有保护内容，请先在精剪中调整。</small>}</details></div></div></section></section>
+          </div></section><details className="advanced-settings"><summary>重新建立时间线</summary><p>会按当前素材重新排列画面；现有字幕时间码保留，请先确认。</p><button type="button" className="flow-secondary" disabled={!canGenerate||startingJob||Boolean(activeConstraintSet)} onClick={() => { if (window.confirm("按当前素材重建画面会替换已有片段。确定继续？")) void startJob(true, true); }}>按当前素材重新建立</button>{activeConstraintSet&&<small>当前有保护内容，请先在精剪中调整。</small>}</details></div></div></section></section>
 
       {requirementDialogOpen && (
         <div

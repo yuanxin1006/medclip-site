@@ -4,6 +4,7 @@ import {changeOutputCanvas,outputCanvasSize} from "./editor-output-settings";
 
 import {EditorCaptionView} from "./editor-caption-view";
 import {appendOwnedVisualAsset} from "./editor-workflow.ts";
+import type { LocalMediaIdentity } from "./editor-local-media.ts";
 
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -80,6 +81,7 @@ export type EditorMediaAsset = {
   duration?: number;
   preview?: string;
   mime?: string;
+  mediaIdentity?: LocalMediaIdentity;
 };
 
 type Selection = { kind: "clip" | "caption" | "overlay" | "secondary-audio"; id: string } | null;
@@ -520,7 +522,7 @@ export default function TimelineEditor({
 
   const addLibraryAsset=(assetId:string)=>{
     try{
-      const owned=assets.filter(a=>a.preview).map(a=>({id:a.id,name:a.name,kind:a.kind,durationMs:Math.max(1,Math.round((a.duration??4)*1000))}));
+      const owned=assets.filter(a=>a.preview).map(a=>({id:a.id,name:a.name,kind:a.kind,durationMs:Math.max(1,Math.round((a.duration??4)*1000)),...(a.mediaIdentity ? { mediaIdentity: a.mediaIdentity } : {})}));
       const id=crypto.randomUUID(),next=appendOwnedVisualAsset(draftRef.current,owned,assetId,id);
       if(commit(next,true)){setSelection({kind:"clip",id});const c=next.tracks.flatMap(t=>t.clips).find(c=>c.id===id)!;seek(c.timelineStartMs,false);}
     }catch(error){onConstraintBlocked?.(error instanceof Error?error.message:"无法添加该素材。");}
@@ -528,7 +530,7 @@ export default function TimelineEditor({
 
   const replaceClip = (clipId: string, assetId: string) => {
     const asset = assets.find((item) => item.id === assetId);
-    if (!asset) return;
+    if (!asset?.preview) return;
     const next = cloneProject(draftRef.current);
     next.tracks.forEach((track) => {
       track.clips = track.clips.map((clip) => {
@@ -552,7 +554,11 @@ export default function TimelineEditor({
         };
       });
     });
-    const registry=new Map(next.assets.map(a=>[a.id,a]));for(const item of assets)registry.set(item.id,{id:item.id,name:item.name,kind:item.kind,durationMs:Math.round((item.duration??4)*1000)});next.assets=[...registry.values()];
+    const registry = new Map(next.assets.map(item => [item.id, item]));
+    registry.set(asset.id, { id: asset.id, name: asset.name, kind: asset.kind,
+      durationMs: Math.round((asset.duration ?? 4) * 1000),
+      ...(asset.mediaIdentity ? { mediaIdentity: asset.mediaIdentity } : {}) });
+    next.assets = [...registry.values()];
     commit(next, true, { type: "MATCH_ASSET_TO_SEGMENT", targetId: clipId, assetId });
   };
 
@@ -1508,6 +1514,7 @@ export default function TimelineEditor({
               <button
                 aria-label={(allClips.some(c=>c.assetId===asset.id)?"选择素材 ":"添加到时间线 ")+asset.name}
                 className={selectedClip?.assetId === asset.id ? "selected" : ""}
+                disabled={!asset.preview && !allClips.some(clip => clip.assetId === asset.id)}
                 key={asset.id}
                 onClick={() => {
                   const clip = allClips.find((item) => item.assetId === asset.id);
@@ -1524,7 +1531,7 @@ export default function TimelineEditor({
                     ? <img alt="" src={asset.preview} />
                     : asset.kind === "视频" ? "▶" : "▧"}
                 </span>
-                <span><b>{asset.name}</b><small>{allClips.some(c=>c.assetId===asset.id)?"已在时间线":"未加入，点击添加"}，{asset.duration ? formatTimeMs(asset.duration * 1000) : "图片"}</small></span>
+                <span><b>{asset.name}</b><small>{allClips.some(c=>c.assetId===asset.id)?"已在时间线":asset.preview?"未加入，点击添加":"未加入时间线"}，{asset.preview ? "本地文件已关联" : "本地文件待关联"}</small></span>
               </button>
             ))}
           </div>
@@ -1779,7 +1786,7 @@ export default function TimelineEditor({
               <label>
                 <span>替换素材</span>
                 <select onChange={(event) => replaceClip(selectedClip.id, event.target.value)} value={selectedClip.assetId}>
-                  {assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                  {assets.map((asset) => <option key={asset.id} value={asset.id} disabled={!asset.preview}>{asset.name}</option>)}
                 </select>
               </label>
               <div className="property-grid">

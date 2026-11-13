@@ -554,7 +554,7 @@ test('project schema and position-scale validator define visual kinds and track 
   assert.match(core,/export type TimelineTrackType = "audio" \| "video" \| "broll" \| "captions"/);
   assert.match(core,/export type TimelineTrack = \{[\s\S]*?type: TimelineTrackType;[\s\S]*?clips: TimelineClip\[\]/);
   assert.match(core,/export type TimelineClip = \{[\s\S]*?id: string;[\s\S]*?trackId: string;/);
-  assert.match(core,/return \{\s*\.\.\.parsed,\s*schemaVersion: 2,\s*captions\s*\}/);
+  assert.match(core,/return \{\s*\.\.\.parsed,\s*schemaVersion: 2,\s*assets:[\s\S]*?\n\s*captions\s*\}/);
   assert.match(validator,/const matchingTracks = context\.project\.tracks\.filter\(\(track\) => track\.clips\.some\(\(candidate\) => candidate\.id === action\.targetId\)\)/);
   assert.match(validator,/clip\.trackId !== track\.id/);
 });
@@ -1084,7 +1084,7 @@ test('provider-free fixture response is structurally wired to the genuine editor
   assert.match(studio,/applyAIEditingPlan\(\s*review\.result\.result\.data,\s*\{/);
   assert.match(studio,/setEditorAIUndoProject\(cloneProject\(editorProject\)\)/);
   assert.match(studio,/handleEditorProjectChange\(applied\.project\)/);
-  assert.match(studio,/window\.localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio,/window\.localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
 });
 
 test('live component source orders apply result, undo snapshot, commit callback, and success summary',()=>{
@@ -1131,7 +1131,7 @@ test('TimelineEditor Undo and Redo propagate snapshots without resetting selecti
   assert.doesNotMatch(timeline,/useEffect\(\(\) => \{\s*(?:draftRef\.current = cloneProject\(project\);\s*)?setDraft\(cloneProject\(project\)\)/);
   const parent=studio.slice(studio.indexOf('const handleEditorProjectChange'),studio.indexOf('const handleEditorPreviewTimeChange'));
   assert.match(parent,/setEditorProject\(nextProject\)[\s\S]*setMatchSegments\(projectToMatchSegments\(nextProject\)\)/);
-  assert.match(studio,/window\.localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio,/window\.localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
 });
 
 test('TimelineEditor UI and preview are sourced from its project-derived draft',()=>{
