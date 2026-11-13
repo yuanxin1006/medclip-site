@@ -285,59 +285,61 @@ export default function MusicPage() {
       {warning && <div className="music-page-message is-warning" role="status">{warning}</div>}
       {notice && <div className="music-page-message is-success" role="status">{notice}</div>}
 
-      <section className="music-track-library-heading"><h2>音乐音轨库</h2></section>
-      <div className="music-layout">
-        <section className="music-catalog">
-          <div className="music-catalog-title"><h2>公开音轨</h2></div>
-          {loading && <div className="music-empty-state">正在读取音乐作品…</div>}
-          {!loading && !error && publishedTracks.length === 0 && (
-            <div className="music-empty-state"><strong>还没有公开作品</strong></div>
-          )}
-          {!loading && publishedTracks.map((track) => (
-            <TrackRow
-              coverUrl={track.cover_path ? coverUrls[track.cover_path] : undefined}
-              key={track.id}
-              onSelect={() => setSelectedTrackId(track.id)}
-              selected={selectedTrack?.id === track.id}
-              track={track}
-            />
-          ))}
-        </section>
-
-        <aside className="music-now-playing">
-          <p className="platform-kicker">正在播放</p>
-          {selectedTrack ? (
-            <>
-              <TrackCover className="music-cover-large" title={selectedTrack.title} url={selectedTrack.cover_path ? coverUrls[selectedTrack.cover_path] : undefined} />
-              <h2>{selectedTrack.title}</h2>
-              <p>{authorName(selectedTrack)}</p>
-              {selectedTrack.artist_name !== authorName(selectedTrack) && <small className="music-credit">作品署名：{selectedTrack.artist_name}</small>}
-              <div className="music-tags">{selectedTrack.genre && <i>{selectedTrack.genre}</i>}</div>
-              {selectedTrack.description && <p className="music-track-description">{selectedTrack.description}</p>}
-              <MusicPlayer
-                artist={authorName(selectedTrack)}
-                durationSeconds={selectedTrack.duration_seconds ?? 0}
-                error={audioError || (!selectedTrack.audio_path ? "这份草稿还没有音频。" : null)}
-                loading={audioLoading}
-                onRetry={selectedTrack.audio_path ? () => setAudioRetry((value) => value + 1) : undefined}
-                src={audioUrl}
-                title={selectedTrack.title}
+      <div className={visual.library}>
+        <section className="music-track-library-heading"><h2>音乐音轨库</h2></section>
+        <div className="music-layout">
+          <section className="music-catalog">
+            <div className="music-catalog-title"><h2>公开音轨</h2></div>
+            {loading && <div className="music-empty-state">正在读取音乐作品…</div>}
+            {!loading && !error && publishedTracks.length === 0 && (
+              <div className="music-empty-state"><strong>还没有公开作品</strong></div>
+            )}
+            {!loading && publishedTracks.map((track) => (
+              <TrackRow
+                coverUrl={track.cover_path ? coverUrls[track.cover_path] : undefined}
+                key={track.id}
+                onSelect={() => setSelectedTrackId(track.id)}
+                selected={selectedTrack?.id === track.id}
+                track={track}
               />
-              {user && selectedTrack.user_id.toLowerCase() === user.id.toLowerCase() && selectedTrack.audio_path && (
-                <button
-                  className="platform-secondary-button music-download-button"
-                  disabled={downloadingTrackId === selectedTrack.id}
-                  onClick={() => void downloadTrack(selectedTrack)}
-                  type="button"
-                >
-                  {downloadingTrackId === selectedTrack.id ? `正在准备 ${downloadFormatLabel(selectedTrack)}…` : `下载 ${downloadFormatLabel(selectedTrack)}`}
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="music-empty-state"><strong>还未选择音乐</strong><span>从音轨库选择一首试听。</span></div>
-          )}
-        </aside>
+            ))}
+          </section>
+
+          <aside className="music-now-playing">
+            <p className="platform-kicker">正在播放</p>
+            {selectedTrack ? (
+              <>
+                <TrackCover className="music-cover-large" title={selectedTrack.title} url={selectedTrack.cover_path ? coverUrls[selectedTrack.cover_path] : undefined} />
+                <h2>{selectedTrack.title}</h2>
+                <p>{authorName(selectedTrack)}</p>
+                {selectedTrack.artist_name !== authorName(selectedTrack) && <small className="music-credit">作品署名：{selectedTrack.artist_name}</small>}
+                <div className="music-tags">{selectedTrack.genre && <i>{selectedTrack.genre}</i>}</div>
+                {selectedTrack.description && <p className="music-track-description">{selectedTrack.description}</p>}
+                <MusicPlayer
+                  artist={authorName(selectedTrack)}
+                  durationSeconds={selectedTrack.duration_seconds ?? 0}
+                  error={audioError || (!selectedTrack.audio_path ? "这份草稿还没有音频。" : null)}
+                  loading={audioLoading}
+                  onRetry={selectedTrack.audio_path ? () => setAudioRetry((value) => value + 1) : undefined}
+                  src={audioUrl}
+                  title={selectedTrack.title}
+                />
+                {user && selectedTrack.user_id.toLowerCase() === user.id.toLowerCase() && selectedTrack.audio_path && (
+                  <button
+                    className="platform-secondary-button music-download-button"
+                    disabled={downloadingTrackId === selectedTrack.id}
+                    onClick={() => void downloadTrack(selectedTrack)}
+                    type="button"
+                  >
+                    {downloadingTrackId === selectedTrack.id ? `正在准备 ${downloadFormatLabel(selectedTrack)}…` : `下载 ${downloadFormatLabel(selectedTrack)}`}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="music-empty-state"><strong>还未选择音乐</strong><span>从音轨库选择一首试听。</span></div>
+            )}
+          </aside>
+        </div>
       </div>
 
       <section className="music-my-works">
