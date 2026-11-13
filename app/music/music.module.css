@@ -11,8 +11,9 @@
 .page:global(.music-page) :global(.work-card-actions) { background:transparent; border-color:var(--mc-border); padding:16px 0 0; }
 .page:global(.music-page) :global(.work-media-grid img),.page:global(.music-page) :global(.work-media-grid video) { aspect-ratio:16/9; object-fit:contain; background:var(--mc-secondary); border-radius:var(--mc-radius-sm); }
 .page:global(.music-page) :global(.works-private-section),.page:global(.music-page) :global(.music-my-works),.page:global(.music-page) :global(.music-track-library-heading) { margin-top:44px; border-top:var(--mc-hairline) solid var(--mc-border); padding-top:32px; }
-.page:global(.music-page) :global(.music-layout) { grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr); gap:24px; margin-top:24px; }
-.page:global(.music-page) :global(.music-catalog),.page:global(.music-page) :global(.music-now-playing) { min-width:0; padding:24px; border:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-lg); background:var(--mc-surface); box-shadow:none; }
+.page:global(.music-page) :global(.music-track-library-heading) { padding-inline:12px; }
+.page:global(.music-page) :global(.music-layout) { width:100%; min-width:0; box-sizing:border-box; grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr); gap:24px; margin-top:24px; }
+.page:global(.music-page) :global(.music-catalog),.page:global(.music-page) :global(.music-now-playing) { min-width:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
 .page:global(.music-page) :global(.music-catalog-title) { align-items:center; margin-bottom:20px; gap:16px; }
 .page:global(.music-page) :global(.music-song-card) { border:0; border-bottom:var(--mc-hairline) solid var(--mc-border); border-radius:var(--mc-radius-sm); background:transparent; }
 .page:global(.music-page) :global(.music-song-card.is-selected),.page:global(.music-page) :global(.music-song-card:hover) { background:var(--lime-3); }
@@ -49,5 +50,5 @@
 }
 @media(max-width:600px) {
  .page:global(.music-page) :global(.works-section-heading) { align-items:stretch; flex-direction:column; }
- .page:global(.music-page) :global(.work-card),.page:global(.music-page) :global(.music-catalog),.page:global(.music-page) :global(.music-now-playing) { padding:20px; }
+ .page:global(.music-page) :global(.work-card) { padding:20px; }
 }
