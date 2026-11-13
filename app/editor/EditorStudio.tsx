@@ -11,11 +11,11 @@ import {
 } from "react";
 import AITaskProviderSelector from "../../components/ai/AITaskProviderSelector";
 import AITaskResultPreview from "../../components/ai/AITaskResultPreview";
+import { useAuth } from "../../components/auth/AuthProvider";
 import {
+  AITaskClientError,
   runAITask,
   type AITaskSuccessResult,
-  type EditorAITaskId,
-  type EditorTaskInput,
 } from "../../lib/ai/tasks";
 import type { AIProviderId } from "../../lib/ai/types";
 import TimelineEditor from "../TimelineEditor";
@@ -35,13 +35,9 @@ import { EditorDecisionExplanationPanel } from "../editor-decision-explanation-p
 import { deriveEditorDecisionExplanationsV1 } from "../editor-decision-explanations";
 import { deriveProtectedTimelineAnnotationsV1, type ProtectedTimelineAnnotationV1 } from "../editor-protected-timeline";
 import { CreativeIntentPanel } from "../editor-creative-intent-panel";
-import { parseCreativeIntentModelOutputV1 } from "../editor-creative-intent-intake";
 import {
-  analyzingCreativeIntentSessionV1,
   confirmCreativeIntentGroundingV1,
-  creativeIntentReadySessionV1,
   emptyCreativeIntentSessionV1,
-  evaluateCreativeIntentSessionV1,
   invalidateCreativeIntentSessionV1,
   resolveCreativeIntentConflictV1,
   type CreativeIntentSessionV1,
@@ -88,7 +84,6 @@ import {
   type RepairReviewState,
 } from "../editor-repair";
 import {
-  AIEditingPlanValidationError,
   applyAIEditingPlan,
   createSafeEditorAIContext,
   type EditorAIApplyResult,
@@ -164,7 +159,7 @@ import {
 } from "../editor-video-semantic";
 import { inspectEditorVisualContext, editorVisualContextMessage } from "../editor-visual-readiness";
 import type { ConstraintSetV1 } from "../editor-constraints";
-import type { ConstraintEnforcementResultV1 } from "../editor-constraint-enforcement";
+import { ConstraintEnforcementBlockedError, type ConstraintEnforcementResultV1 } from "../editor-constraint-enforcement";
 import {
   ReferenceObjectUrlOwner,
   analyzeReferenceVideoFile,
@@ -245,14 +240,39 @@ type RenderState = "idle" | "rendering" | "ready" | "error";
 type AiState = "idle" | "loading" | "running" | "ready" | "error";
 type TranscriptionQuality = "fast" | "accurate";
 
-const editorAITaskActions: ReadonlyArray<{ id: EditorAITaskId; label: string }> = [
-  { id: "editor.creative_intent_parse", label: "分析创作意图" },
-  { id: "editor.requirements_parse", label: "解析剪辑需求" },
-  { id: "editor.subtitle_semantic_plan", label: "字幕语义规划" },
-  { id: "editor.asset_match_plan", label: "素材匹配计划" },
-  { id: "editor.timeline_plan", label: "时间线规划" },
-  { id: "editor.editing_brief", label: "生成剪辑简报" },
-];
+const unavailableEditorTools = [
+  ["分析创作意图", "当前服务未注册独立的创作意图与保护范围解析任务。"],
+  ["字幕语义规划", "服务商尚未启用字幕语义规划。"],
+  ["素材匹配计划", "服务商尚未启用素材匹配，按画面内容选镜头仍需视觉理解能力。"],
+  ["时间线规划", "服务商尚未启用通用时间线规划。可按明确的片段和时间生成待审核建议。"],
+  ["生成剪辑简报", "服务商尚未启用剪辑简报。"],
+] as const;
+
+type EditorRequirementsReview = {
+  result: AITaskSuccessResult;
+  operationCount: number;
+  project: EditorProject;
+  assets: readonly Asset[];
+  audioSelection: AudioSelection;
+  audioDurationMs: number;
+  requirement: string;
+  userId: string;
+  provider: AIProviderId;
+  constraintSet: ConstraintSetV1 | null;
+  intentSession: CreativeIntentSessionV1;
+};
+
+function editorRequirementsError(error: unknown): string {
+  if (error instanceof AITaskClientError) {
+    return error.code === "INVALID_TASK" || error.code === "PROVIDER_NOT_SUPPORTED_FOR_TASK"
+      ? "当前 AI 服务未启用剪辑需求解析。"
+      : error.message;
+  }
+  if (error instanceof ConstraintEnforcementBlockedError) {
+    return "建议与当前保护约束冲突，时间线没有修改。";
+  }
+  return "AI 返回的剪辑计划未通过安全校验，时间线没有修改。";
+}
 
 type Classification = Array<import("../editor-video-analysis").RawLocalClipClassification>;
 
@@ -776,10 +796,12 @@ export default function Home() {
   const [requirements, setRequirements] = useState("");
   const [requirementDraft, setRequirementDraft] = useState("");
   const [requirementDialogOpen, setRequirementDialogOpen] = useState(false);
+  const { user, loading: authLoading } = useAuth();
   const [selectedAIProvider, setSelectedAIProvider] = useState<AIProviderId | null>(null);
   const [editorAITaskBusy, setEditorAITaskBusy] = useState(false);
+  const editorAITaskInFlight = useRef(false);
   const [editorAITaskError, setEditorAITaskError] = useState<string | null>(null);
-  const [editorAIPlan, setEditorAIPlan] = useState<AITaskSuccessResult | null>(null);
+  const [requirementsReview, setRequirementsReview] = useState<EditorRequirementsReview | null>(null);
   const [editorAIApplyResult, setEditorAIApplyResult] = useState<EditorAIApplyResult | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const [previewElapsed, setPreviewElapsed] = useState(0);
@@ -4160,189 +4182,154 @@ export default function Home() {
 
     useEffect(()=>{if(editorProject&&jobState==="idle"){const clips=editorProject.tracks.filter(t=>t.type==="video"||t.type==="broll").flatMap(t=>t.clips);if(clips.length&&clips.every(c=>assets.some(a=>a.id===c.assetId&&a.preview))){setMatchSegments(projectToMatchSegments(editorProject));setJobState("done");setProgress(100);}}},[editorProject,assets,jobState]);
 
-  const runEditorTextTask = async (task: EditorAITaskId, requirementOverride?: string) => {
+  const validateRequirementsPlan = (review: EditorRequirementsReview) => applyAIEditingPlan(
+    review.result.result.data,
+    {
+      project: review.project,
+      ownedAssetIds: new Set(review.assets.map((asset) => asset.id)),
+      audioSourceDurationMs: review.audioDurationMs,
+      ...(review.constraintSet ? { constraintSet: review.constraintSet } : {}),
+      ...(review.intentSession.proposalContext ? { constraintContext: {
+        intentVersionId: review.intentSession.proposalContext.sourceIntentVersionId,
+        constraintSetId: review.intentSession.proposalContext.sourceConstraintSetId,
+        constraintFingerprint: review.intentSession.proposalContext.sourceConstraintFingerprint,
+      } } : {}),
+      ...(review.intentSession.ledger ? { rejectedOperationTuples: review.intentSession.ledger.rejectedProposalOperationTuples } : {}),
+    },
+  );
+
+  const currentRequirementsReview = requirementsReview
+    && !authLoading && requirementsReview.userId === user?.id
+    && requirementsReview.provider === selectedAIProvider
+    && requirementsReview.project === editorProject
+    && requirementsReview.assets === assets
+    && requirementsReview.audioSelection === audioSelection
+    && requirementsReview.audioDurationMs === audioDurationMs
+    && requirementsReview.constraintSet === activeConstraintSet
+    && requirementsReview.intentSession === creativeIntentSession
+    && requirementsReview.requirement === requirementDraft.trim()
+    ? requirementsReview : null;
+
+  useEffect(() => {
+    if (!currentRequirementsReview && requirementsReview) setRequirementsReview(null);
+  }, [currentRequirementsReview, requirementsReview]);
+
+  const runEditorTextTask = async () => {
+    if (editorAITaskInFlight.current) return;
+    setRequirementsReview(null);
+    setEditorAIApplyResult(null);
+    setEditorAITaskError(null);
+    if (authLoading || !user) {
+      setEditorAITaskError("请先登录后再使用 AI 功能。");
+      return;
+    }
     if (!selectedAIProvider) {
       setEditorAITaskError("请先选择一个已经连接的 AI 服务。");
       return;
     }
-
-    const editingRequirement = (requirementOverride ?? requirements).trim();
-    const currentSubtitleText = (subtitleText.trim() || recognizedSubtitleText.trim()).slice(0, 24_000);
-    const assetDescriptions = assets.slice(0, 24).map((asset, index) => [
-      `素材 ${index + 1}`,
-      asset.kind,
-      asset.name,
-      typeof asset.semanticScore === "number" ? asset.semanticTopic : undefined,
-    ].filter(Boolean).join("，"));
-    let input: EditorTaskInput;
-    if (editorProject && (task === "editor.creative_intent_parse" || task === "editor.requirements_parse")) {
-      const readiness = inspectEditorVisualContext(editorProject, new Set(assets.map((asset) => asset.id)));
-      if (readiness.status !== "READY") {
-        setEditorAITaskError(editorVisualContextMessage(readiness.status));
-        return;
-      }
+    if (!editorProject) {
+      setEditorAITaskError("请先建立时间线，再生成剪辑建议。");
+      return;
     }
-
-    if (task === "editor.creative_intent_parse") {
-      if (!editorProject) {
-        setEditorAITaskError("请先生成剪辑预览，再分析创作意图。");
-        return;
-      }
-      if (!editingRequirement) {
-        setEditorAITaskError("请先填写创作要求。");
-        return;
-      }
-      input = { editingRequirement };
-    } else if (task === "editor.requirements_parse") {
-      if (!editorProject) {
-        setEditorAITaskError("请先生成剪辑预览，再让 AI 安全应用高级剪辑需求。");
-        return;
-      }
-      if (!editingRequirement) {
-        setEditorAITaskError("请先填写并保存高级剪辑需求。");
-        return;
-      }
-      const activeVisualClips = editorProject.tracks
-        .filter((track) => track.type === "video" || track.type === "broll")
-        .flatMap((track) => track.clips.filter((clip) => (
-          clip.trackId === track.id
-          && clip.timelineStartMs <= previewElapsed * 1_000
-          && previewElapsed * 1_000 < clip.timelineEndMs
-          && assets.some((asset) => asset.id === clip.assetId && asset.kind === clip.kind)
-        )));
-      input = {
-        editingRequirement,
-        ...(currentSubtitleText ? { subtitleText: currentSubtitleText } : {}),
-        ...(assetDescriptions.length ? { assetDescriptions } : {}),
-        editorContext: createSafeEditorAIContext(
-          editorProject,
-          new Set(assets.map((asset) => asset.id)),
-          audioDurationMs,
-          activeVisualClips.length === 1 ? activeVisualClips[0].id : undefined,
-        ),
-      };
-    } else if (task === "editor.subtitle_semantic_plan") {
-      if (!currentSubtitleText) {
-        setEditorAITaskError("请先准备字幕或歌词文本。");
-        return;
-      }
-      input = {
-        subtitleText: currentSubtitleText,
-        ...(editingRequirement ? { editingRequirement } : {}),
-      };
-    } else if (task === "editor.asset_match_plan") {
-      if (assetDescriptions.length === 0) {
-        setEditorAITaskError("请先上传带有名称或描述的素材。");
-        return;
-      }
-      input = {
-        assetDescriptions,
-        ...(currentSubtitleText ? { subtitleText: currentSubtitleText } : {}),
-        ...(editingRequirement ? { editingRequirement } : {}),
-      };
-    } else if (task === "editor.timeline_plan") {
-      if (!editingRequirement) {
-        setEditorAITaskError("请先填写并保存高级剪辑需求。");
-        return;
-      }
-      input = {
-        editingRequirement,
-        ...(currentSubtitleText ? { subtitleText: currentSubtitleText } : {}),
-        ...(assetDescriptions.length ? { assetDescriptions } : {}),
-      };
-    } else {
-      if (!editingRequirement) {
-        setEditorAITaskError("请先填写并保存高级剪辑需求。");
-        return;
-      }
-      input = {
-        editingRequirement,
-        ...(currentSubtitleText ? { subtitleText: currentSubtitleText } : {}),
-      };
+    const editingRequirement = requirementDraft.trim();
+    if (!editingRequirement) {
+      setEditorAITaskError("请先填写剪辑需求。");
+      return;
     }
+    if (creativeIntentSession.intent && creativeIntentSession.status !== "READY_TO_PLAN") {
+      setEditorAITaskError("请先确认当前保护范围并完成约束决策。");
+      return;
+    }
+    const ownedAssetIds = new Set(assets.map((asset) => asset.id));
+    const readiness = inspectEditorVisualContext(editorProject, ownedAssetIds);
+    if (readiness.status !== "READY") {
+      setEditorAITaskError(editorVisualContextMessage(readiness.status));
+      return;
+    }
+    const activeVisualClips = editorProject.tracks
+      .filter((track) => track.type === "video" || track.type === "broll")
+      .flatMap((track) => track.clips.filter((clip) => (
+        clip.trackId === track.id
+        && clip.timelineStartMs <= previewElapsed * 1_000
+        && previewElapsed * 1_000 < clip.timelineEndMs
+        && assets.some((asset) => asset.id === clip.assetId && asset.kind === clip.kind)
+      )));
+    const input = {
+      editingRequirement,
+      editorContext: createSafeEditorAIContext(
+        editorProject,
+        ownedAssetIds,
+        audioDurationMs,
+        activeVisualClips.length === 1 ? activeVisualClips[0].id : undefined,
+      ),
+    };
 
+    editorAITaskInFlight.current = true;
     setEditorAITaskBusy(true);
-    setEditorAITaskError(null);
-    setEditorAIPlan(null);
-    if (task === "editor.requirements_parse") setEditorAIApplyResult(null);
-    if (task === "editor.creative_intent_parse") {
-      setCreativeIntentSession(analyzingCreativeIntentSessionV1(editingRequirement));
-      setActiveConstraintSet(null);
-      setCollaborativeOptionSet(null);
-      setSelectedCollaborativeOptionId(null);
-      setOptionReviewById({});
-      setEditorProposal(null);
-      setEditorProposalReview(null);
-    }
     try {
-      const result = await runAITask({ task, provider: selectedAIProvider, input });
-      if (task === "editor.creative_intent_parse" && editorProject) {
-        const intent = parseCreativeIntentModelOutputV1({
-          modelOutput: result.result.data,
-          projectId: editorProject.id,
-          sourceRequest: editingRequirement,
-          createdAt: new Date().toISOString(),
-        });
-        const ready = creativeIntentReadySessionV1(intent, creativeIntentSession.ledger);
-        const next = ready.status === "INTENT_READY"
-          ? evaluateCreativeIntentSessionV1({
-              session: ready,
-              project: editorProject,
-              videoSemanticAnalyses: currentVideoSemanticEvidence(editorProject),
-            })
-          : ready;
-        setRequirements(editingRequirement);
-        setRequirementDraft(editingRequirement);
-        setCreativeIntentSession(next);
-        setActiveConstraintSet(next.constraintSet);
-        setRequirementDialogOpen(false);
-        setNotice(next.status === "GROUNDING_REQUIRED" ? "创作意图已分析，请确认保护范围" : "创作意图已通过可行性检查");
-      } else if (task === "editor.requirements_parse" && editorProject) {
-        const applied = applyAIEditingPlan(result.result.data, {
-          project: editorProject,
-          ownedAssetIds: new Set(assets.map((asset) => asset.id)),
-          audioSourceDurationMs: audioDurationMs,
-          ...(activeConstraintSet ? { constraintSet: activeConstraintSet } : {}),
-          ...(creativeIntentSession.proposalContext ? { constraintContext: {
-            intentVersionId: creativeIntentSession.proposalContext.sourceIntentVersionId,
-            constraintSetId: creativeIntentSession.proposalContext.sourceConstraintSetId,
-            constraintFingerprint: creativeIntentSession.proposalContext.sourceConstraintFingerprint,
-          } } : {}),
-          ...(creativeIntentSession.ledger ? { rejectedOperationTuples: creativeIntentSession.ledger.rejectedProposalOperationTuples } : {}),
-        });
-        if (applied.project !== editorProject) {
-          setEditorAIUndoProject(cloneProject(editorProject));
-          handleEditorProjectChange(applied.project);
-        }
-        if (applied.audioSelection !== audioSelection) {
-          setAudioSelection(applied.audioSelection);
-          setAudioStartInput(formatTimeMs(applied.audioSelection.sourceInMs));
-          setAudioEndInput(formatTimeMs(applied.audioSelection.sourceOutMs));
-        }
-        setRequirements(editingRequirement);
-        setRequirementDraft(editingRequirement);
-        setEditorAIApplyResult(applied);
-        setNotice(`AI 已安全应用 ${applied.applied.length} 项剪辑操作`);
-      } else {
-        setEditorAIPlan(result);
+      const result = await runAITask({ task: "editor.requirements_parse", provider: selectedAIProvider, input });
+      if (result.task !== "editor.requirements_parse" || result.provider !== selectedAIProvider
+        || result.result.capability !== "TEXT_REASONING") {
+        throw new Error("Unexpected editing task response.");
       }
+      const review: EditorRequirementsReview = {
+        result, operationCount: 0, project: editorProject, assets, audioSelection, audioDurationMs,
+        requirement: editingRequirement, userId: user.id, provider: selectedAIProvider,
+        constraintSet: activeConstraintSet, intentSession: creativeIntentSession,
+      };
+      const candidate = validateRequirementsPlan(review);
+      setRequirementsReview({ ...review, operationCount: candidate.project === editorProject ? 0 : candidate.applied.length });
     } catch (error) {
-      if (task === "editor.requirements_parse") {
-        setEditorAITaskError(
-          error instanceof AIEditingPlanValidationError
-            ? "AI 返回的剪辑计划未通过安全校验，时间线没有修改。"
-            : "暂时无法理解该剪辑需求，请稍后重试或手动调整。",
-        );
-      } else if (task === "editor.creative_intent_parse") {
-        setCreativeIntentSession(emptyCreativeIntentSessionV1(editingRequirement));
-        setEditorAITaskError(error instanceof Error ? error.message : "创作意图输出未通过严格校验。");
-      } else {
-      setEditorAITaskError(error instanceof Error ? error.message : "AI 任务暂时无法完成。");
-      }
+      setEditorAITaskError(editorRequirementsError(error));
     } finally {
+      editorAITaskInFlight.current = false;
       setEditorAITaskBusy(false);
     }
   };
+
+  const confirmRequirementsPlan = () => {
+    if (editorAITaskBusy || !editorProject || !currentRequirementsReview?.operationCount) return;
+    setRequirementsReview(null);
+    setEditorAITaskError(null);
+    try {
+      const applied = validateRequirementsPlan(currentRequirementsReview);
+      if (applied.project === editorProject || !applied.applied.length) return;
+      setEditorAIUndoProject(cloneProject(editorProject));
+      handleEditorProjectChange(applied.project);
+      setAudioSelection(applied.audioSelection);
+      setAudioStartInput(formatTimeMs(applied.audioSelection.sourceInMs));
+      setAudioEndInput(formatTimeMs(applied.audioSelection.sourceOutMs));
+      setEditorAIApplyResult(applied);
+      setNotice(`已按你的确认应用 ${applied.applied.length} 项剪辑操作`);
+    } catch (error) {
+      setEditorAITaskError(editorRequirementsError(error));
+    }
+  };
+
+  const requirementsReviewPanel = (
+    <>
+      <AITaskResultPreview
+        busy={editorAITaskBusy}
+        error={null}
+        result={currentRequirementsReview?.result ?? null}
+        title="剪辑建议预览"
+      />
+      {editorAITaskError && <p className="editor-ai-dialog-error" role="alert">{editorAITaskError}</p>}
+      {requirementsReview && !currentRequirementsReview && <p role="status">项目、需求或账号状态已变化，请重新生成建议。</p>}
+      {currentRequirementsReview && (
+        <div className="editor-proposal-actions">
+          <p>{currentRequirementsReview.operationCount
+            ? `请核对全部 ${currentRequirementsReview.operationCount} 项可执行操作，再确认应用。`
+            : "这份建议没有可应用的时间线更改。"}</p>
+          <button className="platform-secondary-button" type="button" onClick={() => setRequirementsReview(null)}>放弃建议</button>
+          {currentRequirementsReview.operationCount > 0 && (
+            <button className="flow-primary" type="button" onClick={confirmRequirementsPlan}>确认并应用剪辑建议</button>
+          )}
+        </div>
+      )}
+      {editorAIApplyResult && <EditorAIApplySummary result={editorAIApplyResult} />}
+    </>
+  );
 
   const explanationConstraintSet = activeConstraintSet ?? creativeIntentSession.constraintSet ?? undefined;
   const protectionAnnotations = useMemo(() => editorProject ? deriveProtectedTimelineAnnotationsV1({
@@ -5060,7 +5047,25 @@ export default function Home() {
                 自动识别字幕使用音频中对应语句的实际开始与结束时间；修改文字不会改变时间码。
               </small>
             </section>
-          )}<div className="flow-next"><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>管理声音文件</button><button className="flow-secondary" type="button" onClick={()=>goFlow("assistant")}>使用 AI 辅助（可选）</button><button className="flow-primary" type="button" onClick={()=>goFlow("finish")}>前往精剪与导出</button></div></div></section><section className="editor-flow-stage" data-editor-stage="assistant" hidden={flowStage!=="assistant"} aria-labelledby="flow-assistant"><header className="flow-stage-heading"><span>03</span><div><h2 id="flow-assistant">AI 辅助剪辑</h2><p>可选，先生成建议，再由你审核执行。</p></div></header><div className="panel workflow-step-card ai-planning-step flow-card"><div className="flow-ai-context" role="status">{!editorProject?<><span>素材已上传后，还需要先建立时间线。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>去建立时间线</button></>:!editorProject.tracks.some(t=>t.clips.length)?<><span>当前工程还没有可编辑片段。</span><button className="flow-link" type="button" onClick={()=>goFlow("finish")}>去精剪添加片段</button></>:editorProject.tracks.flatMap(t=>t.clips).some(c=>!assets.some(a=>a.id===c.assetId&&a.preview))?<><span>时间线已有片段，部分文件需要重新关联。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>关联素材</button></>:<span>时间线已就绪。建议与实际执行分开，所有候选都需要审核。</span>}</div><div className="flow-ai-tabs" role="tablist" aria-label="AI 辅助方式">{[["request","按需求剪辑"],["lyrics","按字幕选镜头"],["reference","参考视频风格"]].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={aiTool===id} onClick={()=>setAiTool(id as "request"|"lyrics"|"reference")}>{label}</button>)}</div><div className="editor-ai-tool" hidden={aiTool!=="request"}><div className="flow-request"><label htmlFor="editor-flow-request">想怎么剪？</label><textarea id="editor-flow-request" aria-label="剪辑需求" value={requirementDraft} placeholder="例如：保留问诊镜头，删掉等待画面，保留原声。" onChange={e=>{setRequirementDraft(e.target.value);if(creativeIntentSession.intent&&e.target.value.trim()!==creativeIntentSession.sourceRequest)invalidateCreativeIntent(e.target.value,"需求已修改，请重新分析并确认保护范围。");}}/><button type="button" className="flow-primary" disabled={editorAITaskBusy||proposalBusy||!editorProject||(creativeIntentSession.status!=="READY_TO_PLAN"&&(!selectedAIProvider||!requirementDraft.trim()))} onClick={()=>creativeIntentSession.status==="READY_TO_PLAN"?generateProductionProposal():void runEditorTextTask("editor.creative_intent_parse",requirementDraft.trim())}>{editorAITaskBusy?"正在分析需求…":proposalBusy?"正在生成建议…":creativeIntentSession.status==="READY_TO_PLAN"?"生成待审核建议":"分析剪辑需求"}</button><small>{!editorProject?"先建立时间线，再让 AI 提出建议。":!selectedAIProvider&&creativeIntentSession.status!=="READY_TO_PLAN"?"选择 AI 服务后可分析需求；手动剪辑和本地画面匹配无需调用服务商。":creativeIntentSession.status==="READY_TO_PLAN"?"只生成建议，审核后才能执行。":"分析后先确认保护范围，再生成建议。"}</small></div><details className="advanced-settings flow-provider"><summary>{selectedAIProvider?"已选择 AI 服务":"选择 AI 服务"}</summary><div className="editor-ai-provider-first-screen">
+          )}<div className="flow-next"><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>管理声音文件</button><button className="flow-secondary" type="button" onClick={()=>goFlow("assistant")}>使用 AI 辅助（可选）</button><button className="flow-primary" type="button" onClick={()=>goFlow("finish")}>前往精剪与导出</button></div></div></section><section className="editor-flow-stage" data-editor-stage="assistant" hidden={flowStage!=="assistant"} aria-labelledby="flow-assistant"><header className="flow-stage-heading"><span>03</span><div><h2 id="flow-assistant">AI 辅助剪辑</h2><p>可选，先生成建议，再由你审核执行。</p></div></header><div className="panel workflow-step-card ai-planning-step flow-card"><div className="flow-ai-context" role="status">{!editorProject?<><span>素材已上传后，还需要先建立时间线。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>去建立时间线</button></>:!editorProject.tracks.some(t=>t.clips.length)?<><span>当前工程还没有可编辑片段。</span><button className="flow-link" type="button" onClick={()=>goFlow("finish")}>去精剪添加片段</button></>:editorProject.tracks.flatMap(t=>t.clips).some(c=>!assets.some(a=>a.id===c.assetId&&a.preview))?<><span>时间线已有片段，部分文件需要重新关联。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>关联素材</button></>:<span>时间线已就绪。建议与实际执行分开，所有候选都需要审核。</span>}</div><div className="flow-ai-tabs" role="tablist" aria-label="AI 辅助方式">{[["request","按需求剪辑"],["lyrics","按字幕选镜头"],["reference","参考视频风格"]].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={aiTool===id} onClick={()=>setAiTool(id as "request"|"lyrics"|"reference")}>{label}</button>)}</div><div className="editor-ai-tool" hidden={aiTool!=="request"}><div className="flow-request">
+            <label htmlFor="editor-flow-request">想怎么剪？</label>
+            <textarea
+              id="editor-flow-request"
+              aria-label="剪辑需求"
+              value={requirementDraft}
+              placeholder="例如：将第一个片段调为 1.5 倍速，或在该片段第 2 秒分割。"
+              onChange={(event) => setRequirementDraft(event.target.value)}
+            />
+            <button type="button" className="flow-primary"
+              disabled={editorAITaskBusy || !editorProject || !selectedAIProvider || !requirementDraft.trim()}
+              onClick={() => void runEditorTextTask()}
+            >{editorAITaskBusy ? "正在生成建议…" : "生成 AI 剪辑建议"}</button>
+            <small>{!editorProject ? "先建立时间线，再生成剪辑建议。"
+              : !selectedAIProvider ? "请登录并选择已连接的 AI 服务。"
+              : "可按明确的片段、时间或字幕生成建议。需求和当前时间线的文本信息会发给所选服务商。请先核对建议，再确认应用。"}</small>
+          </div>
+          {!requirementDialogOpen && requirementsReviewPanel}
+          <details className="advanced-settings flow-provider"><summary>{selectedAIProvider?"已选择 AI 服务":"选择 AI 服务"}</summary><div className="editor-ai-provider-first-screen">
           <AITaskProviderSelector
             disabled={editorAITaskBusy}
             onSelect={setSelectedAIProvider}
@@ -5076,7 +5081,7 @@ export default function Home() {
                 />
                 <span>
                   <b>生成多个剪辑方案</b>
-                  <small>可选功能。开启后，MedClip 会生成 2–3 个满足当前保护约束的不同剪辑方案供你选择；可能增加 AI 调用次数和处理时间，普通剪辑无需开启。</small>
+                  <small>可选功能。开启后，MedClip 会生成 2–3 个满足当前保护约束的不同剪辑方案供你选择；方案在浏览器本地生成。</small>
                 </span>
               </label>
               <button
@@ -5085,28 +5090,18 @@ export default function Home() {
                 onClick={generateProductionProposal}
                 type="button"
               >
-                {proposalBusy ? "正在生成本地建议…" : planGenerationMode === "MULTI_OPTION" ? "生成多个剪辑方案" : "生成 AI 剪辑建议"}
+                {proposalBusy ? "正在生成本地建议…" : planGenerationMode === "MULTI_OPTION" ? "生成多个本地方案" : "生成基于保护约束的本地建议"}
               </button>
               <small>{creativeIntentSession.status === "READY_TO_PLAN"
                 ? "仅生成待审核建议，不修改时间线，也不创建撤销记录。"
                 : "完成创作意图分析、保护确认和冲突决策后才可生成建议。"}</small>
-            </div><div aria-label="视频剪辑文本 AI 工具" className="ai-task-actions">
-              {editorAITaskActions.map((action) => <button
-                className="platform-secondary-button"
-                disabled={editorAITaskBusy || !selectedAIProvider}
-                key={action.id}
-                onClick={() => void runEditorTextTask(action.id)}
-                type="button"
-              >{editorAITaskBusy ? "处理中…" : action.label}</button>)}
             </div>
-{editorAIApplyResult && <EditorAIApplySummary result={editorAIApplyResult} />}
-<AITaskResultPreview
-              busy={editorAITaskBusy}
-              error={editorAITaskError}
-              result={editorAIPlan}
-              safetyNote="高级剪辑需求只会应用通过 MedClip 安全校验的白名单操作；其他 AI 规划仅供预览，您仍可继续手动编辑。"
-              title="AI 剪辑计划预览"
-            /><details className="advanced-settings requirement-advanced">
+            <dl aria-label="暂未启用的剪辑工具">
+              {unavailableEditorTools.map(([label, reason]) => (
+                <div key={label}><dt>{label}</dt><dd>{reason}</dd></div>
+              ))}
+            </dl>
+            <details className="advanced-settings requirement-advanced">
             <summary>高级剪辑需求{requirements ? "（已填写）" : ""}</summary>
             <div className="field">
               <button
@@ -5695,10 +5690,9 @@ export default function Home() {
                   rows={10}
                   value={requirementDraft}
                 />
-                {!editorProject && <p className="editor-ai-dialog-hint">请先生成剪辑预览，AI 才能在真实时间线上安全应用需求。</p>}
+                {!editorProject && <p className="editor-ai-dialog-hint">请先建立时间线，再生成待审核的剪辑建议。</p>}
                 {editorProject && !selectedAIProvider && <p className="editor-ai-dialog-hint">请先在页面顶部选择已连接的 AI 服务。</p>}
-                {editorAITaskError && <p className="editor-ai-dialog-error" role="alert">{editorAITaskError}</p>}
-                {editorAIApplyResult && <EditorAIApplySummary result={editorAIApplyResult} />}
+                {requirementsReviewPanel}
                 <div className="example-requirements">
                   <span>快速添加：</span>
                   {[
@@ -5731,6 +5725,7 @@ export default function Home() {
                 onClick={() => {
                   setRequirementDraft("");
                   setRequirements("");
+                  setRequirementsReview(null);
                   setEditorAIApplyResult(null);
                   setEditorAITaskError(null);
                   invalidateCreativeIntent("", "原始要求已清除，请重新分析创作意图。");
@@ -5742,24 +5737,12 @@ export default function Home() {
               <div>
                 <button className="secondary" onClick={() => setRequirementDialogOpen(false)} type="button">取消</button>
                 <button
-                  className="primary"
-                  disabled={editorAITaskBusy || !selectedAIProvider || !editorProject || !requirementDraft.trim()}
-                  onClick={() => void runEditorTextTask("editor.creative_intent_parse", requirementDraft.trim())}
-                  type="button"
-                >
-                  {editorAITaskBusy ? "AI 正在分析…" : "分析创作意图"}
-                </button>
-                <button
                   className="primary ai-apply-button"
                   disabled={editorAITaskBusy || !selectedAIProvider || !editorProject || !requirementDraft.trim()}
-                  onClick={() => {
-                    const nextRequirement = requirementDraft.trim();
-                    setRequirements(nextRequirement);
-                    void runEditorTextTask("editor.requirements_parse", nextRequirement);
-                  }}
+                  onClick={() => void runEditorTextTask()}
                   type="button"
                 >
-                  {editorAITaskBusy ? "AI 正在分析…" : "AI 分析并应用"}
+                  {editorAITaskBusy ? "正在生成建议…" : "解析剪辑需求"}
                 </button>
                 <button
                   className="primary"

@@ -19,7 +19,7 @@ const kimiTaskSource = readFileSync(new URL("../../supabase/functions/_shared/ai
 const doubaoTaskSource = readFileSync(new URL("../../supabase/functions/_shared/ai-tasks/providers/doubao.ts", import.meta.url), "utf8");
 
 function invocation(source: string): string {
-  return source.match(/runAITask\(\{\s*task,\s*provider: selected(?:AI)?Provider,\s*input\s*\}\)/)?.[0] ?? "";
+  return source.match(/runAITask\(\{\s*task(?:: "editor\.requirements_parse")?,\s*provider: selected(?:AI)?Provider,\s*input\s*\}\)/)?.[0] ?? "";
 }
 
 test("create-music and editor share safe connected-provider metadata", () => {
@@ -37,7 +37,7 @@ test("create-music and editor share safe connected-provider metadata", () => {
 test("connected providers are selectable and unconnected providers cannot run tasks", () => {
   assert.match(selectorSource, /onClick=\{\(\) => onSelect\(provider\.id\)\}/);
   assert.match(createMusicSource, /disabled=\{aiTaskBusy \|\| !selectedProvider\}/);
-  assert.match(editorSource, /disabled=\{editorAITaskBusy \|\| !selectedAIProvider\}/);
+  assert.match(editorSource, /disabled=\{editorAITaskBusy \|\| !selectedAIProvider \|\| !editorProject/);
   assert.match(createMusicSource, /if \(!selectedProvider\)/);
   assert.match(editorSource, /if \(!selectedAIProvider\)/);
 });
@@ -71,32 +71,33 @@ test("music page wires all five text-reasoning tasks", () => {
   assert.match(createMusicSource, /音乐生成尚未启用/);
 });
 
-test("editor wires all five text-reasoning planning tasks", () => {
-  for (const task of [
-    "editor.requirements_parse",
-    "editor.subtitle_semantic_plan",
-    "editor.asset_match_plan",
-    "editor.timeline_plan",
-    "editor.editing_brief",
-  ]) assert.match(editorSource, new RegExp(task.replace(".", "\\.")));
-  assert.match(editorSource, /asset\.name/);
-  assert.match(editorSource, /asset\.semanticTopic/);
+test("editor calls the deployed requirements task and explains unavailable tools", () => {
+  assert.match(editorSource, /runAITask\(\{ task: "editor\.requirements_parse", provider: selectedAIProvider, input \}\)/);
+  for (const label of ["分析创作意图", "字幕语义规划", "素材匹配计划", "时间线规划", "生成剪辑简报"]) {
+    assert.match(editorSource, new RegExp(label));
+  }
+  assert.doesNotMatch(editorSource, /editor\.(?:creative_intent_parse|subtitle_semantic_plan|asset_match_plan|timeline_plan|editing_brief)/);
 });
 
-test("editor requirements mutate only through the deterministic validated apply layer", () => {
+test("editor requirements generate a review and commit only after user confirmation", () => {
   const handlerStart = editorSource.indexOf("const runEditorTextTask");
-  const renderStart = editorSource.indexOf("\n  return (", handlerStart);
-  const handler = editorSource.slice(handlerStart, renderStart);
-  assert.ok(handlerStart >= 0 && renderStart > handlerStart);
-  assert.match(handler, /setEditorAIPlan/);
-  assert.doesNotMatch(handler, /setEditorProject|setMatchSegments|commitCaptionRecords|setCaptionRecords/);
-  assert.match(handler, /applyAIEditingPlan\(result\.result\.data/);
-  assert.match(handler, /handleEditorProjectChange\(applied\.project\)/);
-  assert.doesNotMatch(handler, /setEditorProject\(result\.result\.data|setMatchSegments\(result\.result\.data/);
+  const confirmStart = editorSource.indexOf("const confirmRequirementsPlan", handlerStart);
+  const panelStart = editorSource.indexOf("const requirementsReviewPanel", confirmStart);
+  assert.ok(handlerStart >= 0 && confirmStart > handlerStart && panelStart > confirmStart);
+  const generate = editorSource.slice(handlerStart, confirmStart);
+  const confirm = editorSource.slice(confirmStart, panelStart);
+  assert.match(generate, /setRequirementsReview\(\{ \.\.\.review/);
+  assert.doesNotMatch(generate, /setEditorProject|handleEditorProjectChange|setAudioSelection|setEditorAIUndoProject/);
+  assert.match(editorSource, /applyAIEditingPlan\(\s*review\.result\.result\.data/);
+  assert.match(confirm, /validateRequirementsPlan\(currentRequirementsReview\)/);
+  assert.match(confirm, /handleEditorProjectChange\(applied\.project\)/);
+  assert.match(editorSource, /currentRequirementsReview[\s\S]*onClick=\{confirmRequirementsPlan\}/);
+  assert.match(editorSource, /requirementsReview\.userId === user\?\.id/);
+  assert.match(editorSource, /requirementsReview\.project === editorProject/);
+  assert.match(editorSource, /requirementsReview\.constraintSet === activeConstraintSet/);
   assert.match(editorRequirementSource, /EXECUTABLE_EDITOR_ACTION_TYPES/);
   assert.match(editorRequirementSource, /ownedAssetIds\.has\(action\.assetId\)/);
   assert.match(editorRequirementSource, /requireTimelineRange/);
-  assert.match(editorSource, /只会应用通过 MedClip 安全校验的白名单操作/);
   assert.match(previewSource, /Object\.entries\(result\.result\.data\)/);
   assert.doesNotMatch(previewSource, /dangerouslySetInnerHTML/);
 });
@@ -160,10 +161,11 @@ test("AI clip reordering reuses the manual reorder engine and official preview/e
   assert.doesNotMatch(editorRequirementSource, /targetIndex|destinationIndex|"MOVE_CLIP"|"REPOSITION_CLIP"/);
 });
 
-test("advanced requirements UI exposes one guarded apply action and safe summaries", () => {
-  assert.match(editorSource, /AI 分析并应用/);
+test("advanced requirements UI exposes guarded generation and safe summaries", () => {
+  assert.match(editorSource, /解析剪辑需求/);
+  assert.match(editorSource, /确认并应用剪辑建议/);
   assert.match(editorSource, /disabled=\{editorAITaskBusy \|\| !selectedAIProvider \|\| !editorProject \|\| !requirementDraft\.trim\(\)\}/);
-  assert.match(editorSource, /runEditorTextTask\("editor\.requirements_parse", nextRequirement\)/);
+  assert.match(editorSource, /onClick=\{\(\) => void runEditorTextTask\(\)\}/);
   assert.match(editorSource, /editor-ai-apply-summary/);
   assert.match(editorSource, /暂不支持或需确认/);
   assert.match(editorSource, /时间线没有修改/);
