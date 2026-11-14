@@ -11,7 +11,7 @@ export function inspectEditorVisualContext(project: EditorProject, ownedAssetIds
   const actionableClipCount = context.clips.filter((clip) => clip.positionScaleEligible).length;
   return {
     status: !timelineClipCount ? "NO_TIMELINE_CLIPS" as const
-      : !actionableClipCount ? "MEDIA_NOT_AVAILABLE" as const : "READY" as const,
+      : actionableClipCount !== timelineClipCount ? "MEDIA_NOT_AVAILABLE" as const : "READY" as const,
     timelineClipCount,
     actionableClipCount,
   };
@@ -19,8 +19,8 @@ export function inspectEditorVisualContext(project: EditorProject, ownedAssetIds
 
 export function editorVisualContextMessage(status: ReturnType<typeof inspectEditorVisualContext>["status"]) {
   return status === "NO_TIMELINE_CLIPS"
-    ? "当前工程尚无可操作的视频时间线片段。上传素材或完成字幕识别不会自动创建片段，请先生成剪辑预览。"
+    ? "当前工程没有可操作的时间线片段。请从添加素材步骤建立时间线，或在精剪中添加片段。"
     : status === "MEDIA_NOT_AVAILABLE"
-      ? "时间线片段存在，但对应本地素材未关联或素材身份不匹配。请先重新关联素材并生成剪辑预览。"
+      ? "时间线中的本地文件尚未全部关联。请在添加素材中重新关联原文件，保留现有剪辑。"
       : "";
 }

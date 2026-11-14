@@ -1,4 +1,5 @@
 import { normalizeOverlay, type EditorOverlay } from "./editor-overlays.ts";
+import { isLocalMediaIdentity, type LocalMediaIdentity } from "./editor-local-media.ts";
 import { normalizeSecondaryAudioClip, type SecondaryAudioClip } from "./editor-secondary-audio.ts";
 
 export type AudioSelectionMode = "full" | "range";
@@ -85,6 +86,7 @@ export type EditorAssetRef = {
   name: string;
   kind: "视频" | "图片";
   durationMs: number;
+  mediaIdentity?: LocalMediaIdentity;
 };
 
 export type EditorProject = {
@@ -97,6 +99,8 @@ export type EditorProject = {
   ratio: string;
   audioSelection: AudioSelection;
   assets: EditorAssetRef[];
+  /** True once visual clips were established, including a timeline later emptied by the user. */
+  visualTimelineInitialized?: boolean;
   tracks: TimelineTrack[];
   captions: TimelineCaption[];
   /** Optional for backward compatibility with projects saved before V2.6A. */
@@ -827,6 +831,13 @@ export function parseEditorProject(value: string | null) {
     return {
       ...parsed,
       schemaVersion: 2,
+      assets: (Array.isArray(parsed.assets) ? parsed.assets : []).filter(asset =>
+        asset && typeof asset.id === "string" && typeof asset.name === "string"
+        && (asset.kind === "视频" || asset.kind === "图片")).map(asset => {
+        if (asset.mediaIdentity === undefined || isLocalMediaIdentity(asset.mediaIdentity)) return asset;
+        // An invalid stored identity must not be accepted as an unverified legacy reference.
+        return { ...asset, mediaIdentity: { bytes: 0, contentSha256: "" } };
+      }),
       captions
     } as EditorProject;
   } catch {

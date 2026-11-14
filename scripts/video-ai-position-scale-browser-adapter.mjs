@@ -495,7 +495,13 @@ export async function createPositionScaleAdapter(env, dependencies={}) {
       catch { throw new PositionScaleGateError('POSITION_SCALE_RESPONSE_ENVELOPE'); }
       try { assertPositionScaleSyntheticResponse(envelope,targetId); }
       catch { throw new PositionScaleGateError('POSITION_SCALE_RESPONSE_ENVELOPE'); }
+      const confirm = page.getByRole('button', { name: '确认并应用剪辑建议', exact: true });
       try {
+        await confirm.or(page.locator('.editor-ai-dialog-error[role="alert"]')).waitFor({ timeout: 90_000 });
+        if (await confirm.isVisible()) {
+          assert.deepEqual((await readEditorState(page)).project, baselineProject);
+          await confirm.click();
+        }
         await page.waitForFunction(()=>Boolean(document.querySelector('.editor-ai-apply-summary'))
           || Boolean(document.querySelector('.editor-ai-dialog-error[role="alert"]')),undefined,{timeout:90_000});
       } catch { throw new PositionScaleGateError('POSITION_SCALE_RESPONSE_CONSUMED'); }

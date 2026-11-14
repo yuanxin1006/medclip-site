@@ -461,7 +461,14 @@ export async function createReorderAdapter(env, dependencies = {}) {
         timeoutMs:90_000,
         getRequestCount:() => tracker.getRequestCount(),
         waitForResponse:() => tracker.waitForResponse(),
-        submitOnce:async () => { assert.equal(requestCount, 0); armed = true; await page.locator('.ai-apply-button').click(); },
+        submitOnce:async () => {
+          assert.equal(requestCount, 0);
+          armed = true;
+          await page.locator('.ai-apply-button').click();
+          const confirm = page.getByRole('button', { name: '确认并应用剪辑建议', exact: true });
+          await confirm.or(page.locator('.editor-ai-dialog-error[role="alert"]')).waitFor({ timeout: 90_000 });
+          if (await confirm.isVisible()) await confirm.click();
+        },
         readEditorSurface:() => readEditorSpecificSurface(page),
         captureEditorState:capture,
       },

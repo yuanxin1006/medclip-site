@@ -554,7 +554,7 @@ test('project schema and position-scale validator define visual kinds and track 
   assert.match(core,/export type TimelineTrackType = "audio" \| "video" \| "broll" \| "captions"/);
   assert.match(core,/export type TimelineTrack = \{[\s\S]*?type: TimelineTrackType;[\s\S]*?clips: TimelineClip\[\]/);
   assert.match(core,/export type TimelineClip = \{[\s\S]*?id: string;[\s\S]*?trackId: string;/);
-  assert.match(core,/return \{\s*\.\.\.parsed,\s*schemaVersion: 2,\s*captions\s*\}/);
+  assert.match(core,/return \{\s*\.\.\.parsed,\s*schemaVersion: 2,\s*assets:[\s\S]*?\n\s*captions\s*\}/);
   assert.match(validator,/const matchingTracks = context\.project\.tracks\.filter\(\(track\) => track\.clips\.some\(\(candidate\) => candidate\.id === action\.targetId\)\)/);
   assert.match(validator,/clip\.trackId !== track\.id/);
 });
@@ -874,7 +874,8 @@ test('runtime success and failure boundaries use existing safe editor signals',(
   const diagnostics=readFileSync(new URL('./video-ai-position-scale-diagnostics.mjs',import.meta.url),'utf8');
   for(const stage of ['POSITION_SCALE_UI_SELECTION','POSITION_SCALE_UI_OBSERVATION','POSITION_SCALE_PREVIEW_OBSERVATION'])
     assert.ok(diagnostics.includes(stage));
-  assert.match(studio,/error instanceof AIEditingPlanValidationError[\s\S]*?AI 返回的剪辑计划未通过安全校验/);
+  assert.match(studio,/function editorRequirementsError/);
+  assert.match(studio,/AI 返回的剪辑计划未通过安全校验/);
   assert.match(studio,/setEditorAITaskBusy\(false\)/);
   assert.doesNotMatch(adapter,/page\.on\('console'[^\n]*console\.text\(\)|page\.on\('pageerror'[^\n]*error\.message/);
   const runner=readFileSync(new URL('./run-video-ai-position-scale-preflight.mjs',import.meta.url),'utf8');
@@ -999,7 +1000,7 @@ test('synthetic success envelope matches the local Edge v70 provider-free fixtur
     generationOccurred:edge.metadata.generationOccurred,providerFreeFixture:edge.metadata.providerFreeFixture});
 });
 
-test('old D9 envelope is incomplete, but runAITask semantics still yield its valid parser input',()=>{
+test('editor requires a complete task envelope before validating canonical parser input',()=>{
   const {before,targetId}=projects();
   const corrected=createPositionScaleSyntheticResponse(targetId);
   const legacy={ok:true,result:corrected.result,metadata:{providerFreeFixture:true,generationOccurred:false}};
@@ -1008,7 +1009,8 @@ test('old D9 envelope is incomplete, but runAITask semantics still yield its val
   const studioSource=readFileSync(new URL('../app/editor/EditorStudio.tsx',import.meta.url),'utf8');
   assert.match(tasksSource,/getSupabaseBrowserClient\(\)\.functions\.invoke\("ai-tasks",\s*\{ body: request \}\)/);
   assert.match(tasksSource,/return requireTaskResult\(safeData, safeData \? null : error\)/);
-  assert.match(studioSource,/applyAIEditingPlan\(result\.result\.data,/);
+  assert.match(studioSource,/result\.task !== "editor\.requirements_parse" \|\| result\.provider !== selectedAIProvider/);
+  assert.match(studioSource,/applyAIEditingPlan\(\s*review\.result\.result\.data,/);
   const runAITaskReturn=body=>{if(!body||typeof body!=='object'||!body.ok)throw new Error('safe task failure');return body;};
   const legacyParserInput=runAITaskReturn(legacy).result.data;
   assert.deepEqual(parseAIEditingPlan(legacyParserInput).actions[0],{...POSITION_SCALE_ACTION,targetId});
@@ -1078,20 +1080,20 @@ test('provider-free fixture response is structurally wired to the genuine editor
   assert.match(adapter,/createPositionScaleSyntheticResponse\(targetId\)/);
   assert.match(adapter,/route\.fulfill\(\{status:200,contentType:'application\/json',body:JSON\.stringify\(synthetic\)\}\)/);
   assert.match(adapter,/task!=='editor\.requirements_parse'/);
-  assert.match(studio,/runAITask\(\{ task, provider: selectedAIProvider, input \}\)/);
-  assert.match(studio,/applyAIEditingPlan\(result\.result\.data,\s*\{/);
+  assert.match(studio,/runAITask\(\{ task: "editor\.requirements_parse", provider: selectedAIProvider, input \}\)/);
+  assert.match(studio,/applyAIEditingPlan\(\s*review\.result\.result\.data,\s*\{/);
   assert.match(studio,/setEditorAIUndoProject\(cloneProject\(editorProject\)\)/);
   assert.match(studio,/handleEditorProjectChange\(applied\.project\)/);
-  assert.match(studio,/window\.localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio,/window\.localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
 });
 
 test('live component source orders apply result, undo snapshot, commit callback, and success summary',()=>{
   const studio=readFileSync(new URL('../app/editor/EditorStudio.tsx',import.meta.url),'utf8');
-  const start=studio.indexOf('const runEditorTextTask');
-  const end=studio.indexOf('\n  return (',start);
+  const start=studio.indexOf('const confirmRequirementsPlan');
+  const end=studio.indexOf('const requirementsReviewPanel',start);
   const handler=studio.slice(start,end);
-  const applyAt=handler.indexOf('const applied = applyAIEditingPlan');
-  const changedAt=handler.indexOf('if (applied.project !== editorProject)');
+  const applyAt=handler.indexOf('const applied = validateRequirementsPlan(currentRequirementsReview)');
+  const changedAt=handler.indexOf('if (applied.project === editorProject || !applied.applied.length) return;');
   const undoAt=handler.indexOf('setEditorAIUndoProject(cloneProject(editorProject))');
   const commitAt=handler.indexOf('handleEditorProjectChange(applied.project)');
   const summaryAt=handler.indexOf('setEditorAIApplyResult(applied)');
@@ -1129,7 +1131,7 @@ test('TimelineEditor Undo and Redo propagate snapshots without resetting selecti
   assert.doesNotMatch(timeline,/useEffect\(\(\) => \{\s*(?:draftRef\.current = cloneProject\(project\);\s*)?setDraft\(cloneProject\(project\)\)/);
   const parent=studio.slice(studio.indexOf('const handleEditorProjectChange'),studio.indexOf('const handleEditorPreviewTimeChange'));
   assert.match(parent,/setEditorProject\(nextProject\)[\s\S]*setMatchSegments\(projectToMatchSegments\(nextProject\)\)/);
-  assert.match(studio,/window\.localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio,/window\.localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
 });
 
 test('TimelineEditor UI and preview are sourced from its project-derived draft',()=>{

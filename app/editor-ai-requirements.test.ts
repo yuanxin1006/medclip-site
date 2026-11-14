@@ -372,14 +372,14 @@ test("SET_CAPTION_TEXT integration rejects invalid plans atomically", () => {
 test("SET_CAPTION_TEXT production wiring uses one project commit and the existing derived consumers", () => {
   const studio = readFileSync(new URL("./editor/EditorStudio.tsx", import.meta.url), "utf8");
   const timeline = readFileSync(new URL("./TimelineEditor.tsx", import.meta.url), "utf8");
-  assert.match(studio, /applyAIEditingPlan\(result\.result\.data/);
+  assert.match(studio, /applyAIEditingPlan\(\s*review\.result\.result\.data/);
   assert.match(studio, /setEditorAIUndoProject\(cloneProject\(editorProject\)\);\s*handleEditorProjectChange\(applied\.project\)/);
   assert.doesNotMatch(studio, /handleEditorProjectChange\(applied\.project\);\s*\}\s*else\s*\{\s*setEditorAIUndoProject/);
   assert.match(studio, /const syncCaptionRecordsFromProject = \(project: EditorProject\) => \{[\s\S]*project\.captions\.map[\s\S]*setCaptionRecords\(captions\)[\s\S]*setSubtitleText\(cuesToSrt\(captions\)\)/);
   assert.match(studio, /const handleEditorProjectChange = \(nextProject: EditorProject\) => \{[\s\S]*setEditorProject\(nextProject\)[\s\S]*syncCaptionRecordsFromProject\(nextProject\)/);
   assert.match(studio, /const subtitleCues = captionRecords;[\s\S]*activeSubtitleCue\?\.text/);
-  assert.match(studio, /new Blob\(\[cuesToSrt\(subtitleCues\)\]/);
-  assert.match(studio, /localStorage\.setItem\("medclip-editor-draft-v1", JSON\.stringify\(editorProject\)\)/);
+  assert.match(studio, /new Blob\(\[cuesToSrt\(cues\)\]/);
+  assert.match(studio, /localStorage\.setItem\(storageKey, JSON\.stringify\(editorProject\)\)/);
   assert.match(studio, /const updateSubtitleCueText = \(cueId: string, text: string\) => \{[\s\S]*commitCaptionRecords\(updated\)/);
   assert.doesNotMatch(studio, /applySetCaptionTextToProject/);
   assert.match(timeline, /recordProjectUndoSnapshot\(historyRef\.current, initialUndoProject\)/);

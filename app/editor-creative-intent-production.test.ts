@@ -8,17 +8,17 @@ import { createConstraintEnforcementFixture } from "./test-support/editor-constr
 const studio = readFileSync(new URL("./editor/EditorStudio.tsx", import.meta.url), "utf8");
 const evaluationPanel = readFileSync(new URL("./editor-evaluation-panel.ts", import.meta.url), "utf8");
 
-test("EditorStudio production caller exposes the full intent, grounding, negotiation, and ready-to-plan path", () => {
-  assert.match(studio, /runEditorTextTask\("editor\.creative_intent_parse", requirementDraft\.trim\(\)\)/);
+test("EditorStudio explains unavailable intent intake and retains grounding and negotiation guards", () => {
+  assert.doesNotMatch(studio, /runAITask\(\{ task: "editor\.creative_intent_parse"/);
   assert.match(studio, /"分析创作意图"/);
-  assert.match(studio, /parseCreativeIntentModelOutputV1/);
+  assert.match(studio, /当前服务未注册独立的创作意图与保护范围解析任务/);
   assert.match(studio, /confirmCreativeIntentGroundingV1/);
   assert.match(studio, /resolveCreativeIntentConflictV1/);
   assert.match(studio, /<CreativeIntentPanel/);
   assert.match(studio, /negotiationState=\{creativeIntentSession\.negotiationState\}/);
   assert.match(studio, /onSelectConstraintResolution=\{selectConstraintResolution\}/);
   assert.match(studio, /creativeIntentSession\.status !== "READY_TO_PLAN"/);
-  assert.match(studio, /"AI 分析并应用"/);
+  assert.match(studio, /确认并应用剪辑建议/);
 });
 test("production proposal call uses the cost-aware collaborative boundary with complete authoritative context", () => {
   const handler = studio.slice(studio.indexOf("const generateProductionProposal"), studio.indexOf("const currentVideoSemanticEvidence"));

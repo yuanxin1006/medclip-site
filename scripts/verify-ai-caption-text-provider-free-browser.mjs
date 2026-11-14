@@ -232,6 +232,10 @@ async function main(){
   await page.locator('.ai-apply-button').click();
   const [rawResponse,safeResponse]=await Promise.all([rawPromise,safePromise]);
   const envelope=await rawResponse.json();
+  const confirm=page.getByRole('button',{name:'确认并应用剪辑建议',exact:true});
+  await confirm.waitFor({timeout:90_000});
+  assert.deepEqual(await persisted(page),baseline);
+  await confirm.click();
   await page.waitForFunction(()=>Boolean(document.querySelector('.editor-ai-apply-summary'))
     ||Boolean(document.querySelector('.editor-ai-dialog-error[role="alert"]')),undefined,{timeout:90_000});
   const surface=await readEditorSpecificSurface(page);
