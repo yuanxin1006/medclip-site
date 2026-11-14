@@ -178,7 +178,7 @@ test("manual editor remains available without an AI provider", () => {
   const canGenerateEnd = editorSource.indexOf(";", canGenerateStart);
   const canGenerate = editorSource.slice(canGenerateStart, canGenerateEnd);
   assert.doesNotMatch(canGenerate, /selectedAIProvider|editorAITask/);
-  assert.match(editorSource, /needsInitialTimeline && !canGenerate\) \|\| jobState === "processing"/);
+  assert.match(editorSource, /disabled=\{!canPrepareEditor \|\| \(needsInitialTimeline && !canGenerate\)\}/);
 });
 
 test("missing connections show the AI services CTA and cost notice", () => {

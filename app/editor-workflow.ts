@@ -18,6 +18,7 @@ export function appendOwnedVisualAsset(project:EditorProject,owned:readonly Owne
  const start=Math.max(0,...track.clips.map(c=>c.timelineEndMs));
  track.clips.push({id:clipId,assetId:asset.id,name:asset.name,kind:asset.kind,trackId:track.id,timelineStartMs:start,timelineEndMs:start+duration,sourceInMs:0,sourceOutMs:duration,transform:{...DEFAULT_TRANSFORM},speedCurve:DEFAULT_SPEED_CURVE.map(p=>({...p})),reason:"用户添加素材"});
  const registry=new Map(next.assets.map(a=>[a.id,a]));for(const a of owned)registry.set(a.id,{...a});next.assets=[...registry.values()];
+ next.visualTimelineInitialized=true;
  next.durationMs=editorProjectDurationMs(next);return next;
 }
 export function validateVisualRelink(

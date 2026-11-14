@@ -57,8 +57,6 @@ export function visualTimelineClips(project: EditorProject) {
     .sort((left, right) => left.timelineStartMs - right.timelineStartMs);
 }
 
-export function needsInitialVisualTimeline(project: EditorProject | null, jobDone: boolean): boolean {
-  if (!project) return true;
-  if (visualTimelineClips(project).length || project.visualTimelineInitialized) return false;
-  return project.visualTimelineInitialized === false || !jobDone;
+export function needsInitialVisualTimeline(project: EditorProject | null): boolean {
+  return !project || (!visualTimelineClips(project).length && project.visualTimelineInitialized !== true);
 }

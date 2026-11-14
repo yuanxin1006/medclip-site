@@ -99,7 +99,7 @@ export type EditorProject = {
   ratio: string;
   audioSelection: AudioSelection;
   assets: EditorAssetRef[];
-  /** False for a subtitle-only draft before its first visual timeline is initialized. */
+  /** True once visual clips were established, including a timeline later emptied by the user. */
   visualTimelineInitialized?: boolean;
   tracks: TimelineTrack[];
   captions: TimelineCaption[];

@@ -844,6 +844,7 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
   const [consent, setConsent] = useState(false);
   const [jobState, setJobState] = useState<JobState>("idle");
   const [startingJob, setStartingJob] = useState(false);
+  const startingEditor = useRef(false);
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState("");
   const [editorProject, setEditorProject] = useState<EditorProject | null>(null);
@@ -1105,6 +1106,9 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
   }, []);
 
   const restoreDraft = (restored: EditorProject) => {
+    if (visualTimelineClips(restored).length && restored.visualTimelineInitialized !== true) {
+      restored = { ...restored, visualTimelineInitialized: true };
+    }
     if (!restored) return;
     if (ACCEPTANCE_INPUT_HYDRATION_BUILD_ENABLED && !acceptanceInputHydratedRef.current) {
       acceptanceInputHydratedRef.current = true;
@@ -1569,14 +1573,29 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
     setPreviewMediaError("");
   }, [previewAsset?.id]);
 
-  const initialVisualAssets = assets.filter(asset => asset.preview && !excludedInitialAssetIds.has(asset.id));
-  const needsInitialTimeline = needsInitialVisualTimeline(editorProject, jobState === "done");
+  const hasVisualTimeline = Boolean(editorProject && visualTimelineClips(editorProject).length);
+  const needsInitialTimeline = needsInitialVisualTimeline(editorProject);
+  const selectedVisualAssets = assets.filter(asset => !excludedInitialAssetIds.has(asset.id));
+  const initialVisualAssets = selectedVisualAssets.filter(asset => asset.preview && asset.file);
+  const hasUnlinkedInitialAssets = selectedVisualAssets.some(asset => !asset.preview || !asset.file);
+  const hasUnlinkedTimelineAssets = Boolean(editorProject && visualTimelineClips(editorProject).some(clip =>
+    !assets.some(asset => asset.id === clip.assetId && asset.kind === clip.kind && asset.preview && asset.file)));
+  const canPrepareEditor = draftLoaded && !mediaImportBusy && !transcriptionBusy && !startingJob
+    && renderState !== "rendering" && jobState !== "processing";
   const canGenerate =
-    initialVisualAssets.length > 0 && !mediaImportBusy &&
+    canPrepareEditor && initialVisualAssets.length > 0 && !hasUnlinkedInitialAssets &&
     (audioMode === "external" ? audioDuration > 0 : visualDuration > 0 || assets.some((asset) => asset.kind === "视频" && asset.file)) &&
     (!externalEnabled || !audios.length || (selectionValidation.valid && !audioSelectionInputError)) &&
     (!durationMismatch || durationMismatchConfirmed) &&
-    !transcriptionBusy && !startingJob && renderState !== "rendering" && consent;
+    consent;
+
+  const initialTimelineHint = !draftLoaded || mediaImportBusy
+    ? "正在读取工程或素材，请稍候。"
+    : hasUnlinkedInitialAssets ? "请在添加素材中重新关联勾选素材的原文件。"
+    : !initialVisualAssets.length ? "请选择要加入初始时间线的素材。"
+    : !consent ? "请确认素材使用权。"
+    : transcriptionBusy ? "字幕正在生成，完成后即可进入精剪。"
+    : "请在声音与字幕中检查音频文件、区间与时长。";
 
   const clearRenderedVideo = () => {
     if (renderedVideoUrl) URL.revokeObjectURL(renderedVideoUrl);
@@ -2960,15 +2979,17 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
   };
 
   const startJob = async (manualOnly = false, rebuild = false) => {
+    if (!canPrepareEditor || startingEditor.current) return;
     if (manualOnly && editorProject && !needsInitialTimeline && !rebuild) {
       setFlowStage("finish");
       setEditorOpen(true);
       return;
     }
     if (!canGenerate) {
-      setNotice("请检查素材、音频模式及素材使用权");
+      setNotice(initialTimelineHint);
       return;
     }
+    startingEditor.current = true;
     setStartingJob(true);
     try {
       setPreviewPlaying(false);
@@ -2989,7 +3010,8 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
         }
       }
       const sourceDuration = preparedAssets.reduce((total, asset) => total + (asset.duration ?? 0), 0);
-      const projectDuration = manualOnly && needsInitialTimeline ? Math.max(1, sourceDuration)
+      const initializingEmptyTimeline = manualOnly && !hasVisualTimeline;
+      const projectDuration = initializingEmptyTimeline ? Math.max(1, sourceDuration)
         : audioMode === "external" ? targetDuration
         : Math.max(1, durationMode === "custom" ? Math.min(targetDuration, sourceDuration) : sourceDuration);
       const targetDurationMs = Math.round(projectDuration * 1000);
@@ -3010,10 +3032,12 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
         projectDuration,
         ratio, fillMode === "居中留黑边" ? "contain" : "cover"
       );
-      if (manualOnly && editorProject && needsInitialTimeline) {
+      if (initializingEmptyTimeline && editorProject) {
+        const assetsById = new Map(editorProject.assets.map(asset => [asset.id, asset]));
+        for (const asset of nextProject.assets) assetsById.set(asset.id, asset);
         nextProject = {
           ...editorProject,
-          assets: nextProject.assets,
+          assets: [...assetsById.values()],
           tracks: editorProject.tracks.some(track => track.id === "video-main")
             ? editorProject.tracks.map(track => track.id === "video-main" ? { ...track, clips: nextProject.tracks[1].clips } : track)
             : [...editorProject.tracks, nextProject.tracks[1]],
@@ -3022,7 +3046,9 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
           updatedAt: nextProject.updatedAt,
         };
       }
-      if (editorProject && audioMode !== "external") nextProject = remapVideoCaptions(editorProject, nextProject);
+      if (editorProject && audioMode !== "external" && !initializingEmptyTimeline) {
+        nextProject = remapVideoCaptions(editorProject, nextProject);
+      }
       setEditorAIUndoProject(null);
       setEditorProject(nextProject);
       syncCaptionRecordsFromProject(nextProject);
@@ -3042,6 +3068,7 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
       setNotice(message);
     } finally {
       setStartingJob(false);
+      startingEditor.current = false;
     }
   };
 
@@ -4486,6 +4513,10 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
     pauseSelectionPreview();
     setFlowStage(next);
   };
+  const enterFinish = () => {
+    goFlow("finish");
+    if (needsInitialTimeline && canGenerate) void startJob(true);
+  };
   const flowStatus:Record<EditorFlowStage,string>={materials:assets.length?assets.length+" 项画面素材":"先添加视频或图片",sound:audioModes[audioMode]+(subtitleCues.length?"，"+subtitleCues.length+" 句字幕":"，字幕可跳过"),assistant:editorProposal?"有建议待审核":reviewedPlanEvidence?"已审核":"按需使用，可跳过",finish:renderState==="ready"?"成片已生成":editorProject?"时间线已建立":"待建立时间线"};
   return (
     <main className={`app-shell editor-studio ${editorOpen ? "editor-active" : ""}`}>
@@ -4506,7 +4537,7 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
 
       </section>
 
-      <nav className="editor-flow-nav" aria-label="剪辑阶段">{EDITOR_FLOW_STAGES.map((step,index)=><button key={step.id} type="button" aria-current={flowStage===step.id?"step":undefined} onClick={()=>goFlow(step.id)}><span className="flow-stage-index">{String(index+1).padStart(2,"0")}</span><span><b>{step.title}</b><small>{flowStatus[step.id]}</small></span>{step.optional&&<em>可选</em>}</button>)}</nav><section className="workspace editor-flow-workspace" id="workspace"><section className="editor-flow-stage" data-editor-stage="materials" hidden={flowStage!=="materials"} aria-labelledby="flow-materials"><header className="flow-stage-heading"><span>01</span><div><h2 id="flow-materials">添加素材</h2><p>先添加视频或图片。独立音频可稍后添加。</p></div></header><div className="panel input-panel flow-card"><div className="panel-heading">
+      <nav className="editor-flow-nav" aria-label="剪辑阶段">{EDITOR_FLOW_STAGES.map((step,index)=><button key={step.id} type="button" aria-current={flowStage===step.id?"step":undefined} onClick={() => step.id === "finish" ? enterFinish() : goFlow(step.id)}><span className="flow-stage-index">{String(index+1).padStart(2,"0")}</span><span><b>{step.title}</b><small>{flowStatus[step.id]}</small></span>{step.optional&&<em>可选</em>}</button>)}</nav><section className="workspace editor-flow-workspace" id="workspace"><section className="editor-flow-stage" data-editor-stage="materials" hidden={flowStage!=="materials"} aria-labelledby="flow-materials"><header className="flow-stage-heading"><span>01</span><div><h2 id="flow-materials">添加素材</h2><p>先添加视频或图片。独立音频可稍后添加。</p></div></header><div className="panel input-panel flow-card"><div className="panel-heading">
             <div>
               
               <div>
@@ -4571,7 +4602,7 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
                       </small>
                     )}
                   </div>
-                  {needsInitialTimeline && asset.preview && (
+                  {!hasVisualTimeline && (
                     <label>
                       <input type="checkbox" aria-label={`加入初始时间线 ${asset.name}`}
                         checked={!excludedInitialAssetIds.has(asset.id)}
@@ -4695,15 +4726,10 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
           </label><div className="flow-material-actions">
             {!needsInitialTimeline && <p className="flow-note">已有时间线。继续精剪会保留当前片段。</p>}
             <button className="flow-primary" type="button"
-              disabled={!draftLoaded || mediaImportBusy || (needsInitialTimeline && !canGenerate) || jobState === "processing"}
+              disabled={!canPrepareEditor || (needsInitialTimeline && !canGenerate)}
               onClick={() => void startJob(true)}
             >{startingJob ? "正在准备素材…" : needsInitialTimeline ? "开始手动剪辑" : "继续精剪"}</button>
-            {needsInitialTimeline && !canGenerate && <small className="flow-disabled-reason">
-              {!initialVisualAssets.length ? "请选择要加入初始时间线的素材。"
-                : !consent ? "请先确认素材使用权。"
-                : audioMode === "external" && !audios.length ? "独立音频模式需要声音文件，可在声音设置中改用视频原声。"
-                : "请在声音设置中检查音频区间与时长。"}
-            </small>}<button className="flow-link" type="button" onClick={()=>goFlow("sound")}>设置声音与字幕（可选）</button></div></div></section><section className="editor-flow-stage" data-editor-stage="sound" hidden={flowStage!=="sound"} aria-labelledby="flow-sound"><header className="flow-stage-heading"><span>02</span><div><h2 id="flow-sound">声音与字幕</h2><p>可选，可直接使用视频原声，字幕也可以跳过。</p></div></header><div className="panel flow-card"><h3>声音来源</h3><div className="field audio-source-field">
+            {needsInitialTimeline && !canGenerate && <small className="flow-disabled-reason">{initialTimelineHint}</small>}<button className="flow-link" type="button" onClick={()=>goFlow("sound")}>设置声音与字幕（可选）</button></div></div></section><section className="editor-flow-stage" data-editor-stage="sound" hidden={flowStage!=="sound"} aria-labelledby="flow-sound"><header className="flow-stage-heading"><span>02</span><div><h2 id="flow-sound">声音与字幕</h2><p>可选，可直接使用视频原声，字幕也可以跳过。</p></div></header><div className="panel flow-card"><h3>声音来源</h3><div className="field audio-source-field">
             <label htmlFor="editor-audio-mode">音频模式</label>
             <select className="editor-audio-mode" id="editor-audio-mode" value={audioMode} disabled={renderState === "rendering" || jobState === "processing" || startingJob || transcriptionBusy} onChange={(event) => {
               if (speechProtected && event.target.value !== "original") {
@@ -5269,7 +5295,7 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
                 自动识别字幕使用音频中对应语句的实际开始与结束时间；修改文字不会改变时间码。
               </small>
             </section>
-          )}<div className="flow-next"><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>管理声音文件</button><button className="flow-secondary" type="button" onClick={()=>goFlow("assistant")}>使用 AI 辅助（可选）</button><button className="flow-primary" type="button" onClick={()=>goFlow("finish")}>前往精剪与导出</button></div></div></section><section className="editor-flow-stage" data-editor-stage="assistant" hidden={flowStage!=="assistant"} aria-labelledby="flow-assistant"><header className="flow-stage-heading"><span>03</span><div><h2 id="flow-assistant">AI 辅助剪辑</h2><p>可选，先生成建议，再由你审核执行。</p></div></header><div className="panel workflow-step-card ai-planning-step flow-card"><div className="flow-ai-context" role="status">{!editorProject?<><span>素材已上传后，还需要先建立时间线。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>去建立时间线</button></>:!editorProject.tracks.some(t=>t.clips.length)?<><span>当前工程还没有可编辑片段。</span><button className="flow-link" type="button" onClick={()=>goFlow("finish")}>去精剪添加片段</button></>:editorProject.tracks.flatMap(t=>t.clips).some(c=>!assets.some(a=>a.id===c.assetId&&a.preview))?<><span>时间线已有片段，部分文件需要重新关联。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>关联素材</button></>:<span>时间线已就绪。建议与实际执行分开，所有候选都需要审核。</span>}</div><div className="flow-ai-tabs" role="tablist" aria-label="AI 辅助方式">{[["request","按需求剪辑"],["lyrics","按字幕选镜头"],["reference","参考视频风格"]].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={aiTool===id} onClick={()=>setAiTool(id as "request"|"lyrics"|"reference")}>{label}</button>)}</div><div className="editor-ai-tool" hidden={aiTool!=="request"}><div className="flow-request">
+          )}<div className="flow-next"><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>管理声音文件</button><button className="flow-secondary" type="button" onClick={()=>goFlow("assistant")}>使用 AI 辅助（可选）</button><button className="flow-primary" type="button" onClick={enterFinish}>前往精剪与导出</button></div></div></section><section className="editor-flow-stage" data-editor-stage="assistant" hidden={flowStage!=="assistant"} aria-labelledby="flow-assistant"><header className="flow-stage-heading"><span>03</span><div><h2 id="flow-assistant">AI 辅助剪辑</h2><p>可选，先生成建议，再由你审核执行。</p></div></header><div className="panel workflow-step-card ai-planning-step flow-card"><div className="flow-ai-context" role="status">{!editorProject?<><span>素材已上传后，还需要先建立时间线。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>去建立时间线</button></>:!editorProject.tracks.some(t=>t.clips.length)?<><span>当前工程还没有可编辑片段。</span><button className="flow-link" type="button" onClick={enterFinish}>去精剪添加片段</button></>:editorProject.tracks.flatMap(t=>t.clips).some(c=>!assets.some(a=>a.id===c.assetId&&a.preview))?<><span>时间线已有片段，部分文件需要重新关联。</span><button className="flow-link" type="button" onClick={()=>goFlow("materials")}>关联素材</button></>:<span>时间线已就绪。建议与实际执行分开，所有候选都需要审核。</span>}</div><div className="flow-ai-tabs" role="tablist" aria-label="AI 辅助方式">{[["request","按需求剪辑"],["lyrics","按字幕选镜头"],["reference","参考视频风格"]].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={aiTool===id} onClick={()=>setAiTool(id as "request"|"lyrics"|"reference")}>{label}</button>)}</div><div className="editor-ai-tool" hidden={aiTool!=="request"}><div className="flow-request">
             <label htmlFor="editor-flow-request">想怎么剪？</label>
             <textarea
               id="editor-flow-request"
@@ -5522,7 +5548,36 @@ function EditorWorkspace({ userId }: { userId: string | null }) {
 <EditorDecisionExplanationPanel
             explanations={decisionExplanations}
             selectedProtectionClauseId={selectedProtectionClauseId}
-          /></div></section><section className="editor-flow-stage" data-editor-stage="finish" hidden={flowStage!=="finish"} aria-labelledby="flow-finish"><header className="flow-stage-heading"><span>04</span><div><h2 id="flow-finish">精剪与导出</h2><p>检查画面、声音和字幕，再导出成片。</p></div></header><div className="flow-finish-actions">{editorProject && !needsInitialTimeline?<button className="flow-primary" type="button" onClick={() => void startJob(true)}>打开精剪</button>:<button className="flow-primary" type="button" onClick={()=>goFlow("materials")}>先添加素材并建立时间线</button>}<small>{editorProject?"在画布预览，在时间线选择对象，在属性中调整。":"仅上传视频即可开始，声音和字幕都可稍后设置。"}</small></div><div className="flow-finish-grid"><section className="result-section" id="workflow">
+          /></div></section><section className="editor-flow-stage" data-editor-stage="finish" hidden={flowStage!=="finish"} aria-labelledby="flow-finish"><header className="flow-stage-heading"><span>04</span><div><h2 id="flow-finish">精剪与导出</h2><p>检查画面、声音和字幕，再导出成片。</p></div></header><div className="flow-finish-actions">
+            <button className="flow-primary" type="button"
+              disabled={!canPrepareEditor || (needsInitialTimeline && !canGenerate)}
+              onClick={() => void startJob(true)}
+            >{startingJob ? "正在建立时间线…" : needsInitialTimeline ? "建立时间线并打开精剪" : "打开精剪"}</button>
+            {needsInitialTimeline && !canGenerate ? (
+              <small role="status">{initialTimelineHint}</small>
+            ) : hasUnlinkedTimelineAssets ? (
+              <small role="status">时间线已保留。请重新关联原文件以恢复预览。</small>
+            ) : editorProject && !hasVisualTimeline && !needsInitialTimeline ? (
+              <small>当前时间线为空，可以打开精剪并添加片段。</small>
+            ) : (
+              <small>在画布预览，在时间线选择对象，在属性中调整。</small>
+            )}
+            {needsInitialTimeline && initialVisualAssets.length > 0 && !hasUnlinkedInitialAssets && (
+              <label className="consent">
+                <input checked={consent} onChange={event => setConsent(event.target.checked)} type="checkbox" />
+                <span>我确认拥有上传素材和音频的使用权，内容不涉及患者隐私或未经授权的个人信息。</span>
+              </label>
+            )}
+            {(hasUnlinkedTimelineAssets || (needsInitialTimeline && !canGenerate)) && (
+              <button className="flow-link" type="button" onClick={() => goFlow("materials")}>
+                {hasUnlinkedTimelineAssets || hasUnlinkedInitialAssets ? "重新关联原文件" : "返回添加素材"}
+              </button>
+            )}
+            {editorProject && !hasVisualTimeline && !needsInitialTimeline && canGenerate && (
+              <button className="flow-secondary" type="button"
+                onClick={() => void startJob(true, true)}>用已关联素材建立时间线</button>
+            )}
+          </div><div className="flow-finish-grid"><section className="result-section" id="workflow">
         <div className="result-heading">
           <div>
             <h3>当前预览</h3>

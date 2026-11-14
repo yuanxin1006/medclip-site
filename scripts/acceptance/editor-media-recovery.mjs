@@ -81,14 +81,18 @@ try {
   await media.setInputFiles(files);
   await page.getByRole('checkbox', { name: '加入初始时间线 video-8.mp4' }).uncheck();
   await page.getByRole('checkbox', { name: /我确认拥有上传素材/ }).check();
-  await page.getByRole('button', { name: '开始手动剪辑', exact: true }).click();
+  assert.equal(await page.locator('input[aria-label^="加入初始时间线"]:checked').count(), 7);
+  assert.equal(await page.locator('.asset-link-state').filter({ hasText: '本地文件已关联' }).count(), 8);
+  assert.equal(await page.locator('.asset-timeline-state').filter({ hasText: '未加入时间线' }).count(), 8);
+  assert.equal(await scopedKey(), undefined);
+  await finish.click();
   await timeline.waitFor();
   const key = await scopedKey();
   const initial = await state(key);
   assert.equal(initial.assets.length, 8);
   assert.deepEqual(clips(initial).map(clip => clip.name), files.slice(0, 7).map((_, index) => `video-${index + 1}.mp4`));
   await timeline.getByRole('button', { name: '添加到时间线 video-8.mp4' }).waitFor();
-  checks.push('A-seven-selected-in-order-eight-in-library');
+  checks.push('A-stage-04-initializes-seven-checked-out-of-eight');
 
   stage = 'B-edit';
   await timeline.getByRole('button', { name: '选择素材 video-2.mp4' }).click();
@@ -229,22 +233,47 @@ try {
   assert.equal(await linked.count(), 1);
   checks.push('D-legacy-requires-preview-and-explicit-confirmation');
 
-  stage = 'A-subtitle-only-first-timeline';
-  await page.evaluate(({ key, legacy }) => {
-    localStorage.setItem(key, JSON.stringify({
-      ...legacy, visualTimelineInitialized: false, tracks: legacy.tracks.map(track => ({ ...track, clips: [] })), assets: [],
-    }));
-  }, { key, legacy });
+  stage = 'C-restored-empty-timeline';
+  const empty = { ...edited, tracks: edited.tracks.map(track => ({ ...track, clips: [] })) };
+  delete empty.visualTimelineInitialized;
+  await page.evaluate(({ key, empty }) => localStorage.setItem(key, JSON.stringify(empty)), { key, empty });
   await page.reload();
-  await media.setInputFiles(files.slice(0, 2));
-  await page.getByRole('checkbox', { name: '加入初始时间线 video-2.mp4' }).waitFor();
+  await page.getByRole('region', { name: '恢复素材关联' }).waitFor();
+  await finish.click();
+  await page.getByRole('status').filter({ hasText: /重新关联勾选素材的原文件/ }).waitFor();
+  assert.equal(await timeline.isVisible(), false);
+  await page.getByRole('button', { name: '重新关联原文件', exact: true }).click();
+  await media.setInputFiles(files);
+  await page.waitForFunction(() => [...document.querySelectorAll('.asset-link-state')].filter(node => node.textContent === '本地文件已关联').length === 8);
+  await page.getByRole('checkbox', { name: '加入初始时间线 video-8.mp4' }).uncheck();
+  await finish.click();
+  const establish = page.getByRole('button', { name: '建立时间线并打开精剪', exact: true });
+  await establish.waitFor();
+  assert.equal(await establish.isEnabled(), false);
   await page.getByRole('checkbox', { name: /我确认拥有上传素材/ }).check();
-  await page.getByRole('button', { name: '开始手动剪辑', exact: true }).click();
+  await establish.click();
+  await timeline.waitFor();
   const initialized = await waitForProject(key, value => value.visualTimelineInitialized === true);
-  assert.equal(initialized.id, legacy.id);
-  assert.deepEqual(initialized.captions, legacy.captions);
-  assert.deepEqual(clips(initialized).map(clip => clip.name), ['video-1.mp4', 'video-2.mp4']);
-  checks.push('A-subtitle-only-draft-initializes-visual-track');
+  assert.equal(initialized.id, edited.id);
+  assert.deepEqual(initialized.captions, edited.captions);
+  assert.deepEqual(initialized.assets, edited.assets);
+  assert.equal(initialized.ratio, edited.ratio);
+  assert.deepEqual(clips(initialized).map(clip => clip.assetId), edited.assets.slice(0, 7).map(asset => asset.id));
+  checks.push('C-stage-04-relinks-and-fills-an-empty-legacy-draft-with-inline-consent');
+
+  stage = 'G-intentionally-empty-timeline';
+  const cleared = { ...empty, visualTimelineInitialized: true };
+  await page.evaluate(({ key, cleared }) => localStorage.setItem(key, JSON.stringify(cleared)), { key, cleared });
+  await page.reload();
+  await media.setInputFiles(files);
+  await page.waitForFunction(() => [...document.querySelectorAll('.asset-link-state')].filter(node => node.textContent === '本地文件已关联').length === 8);
+  await page.getByRole('checkbox', { name: /我确认拥有上传素材/ }).check();
+  await finish.click();
+  assert.equal(await timeline.isVisible(), false);
+  await page.getByRole('button', { name: '打开精剪', exact: true }).click();
+  await timeline.waitFor();
+  assert.deepEqual(await state(key), cleared);
+  checks.push('G-intentionally-empty-timeline-opens-without-repopulating');
   console.log(JSON.stringify({ origin, checks, realProviderCalls: taskRequests.length, aiStatus: response.status() }));
 } catch (error) {
   console.error(JSON.stringify({ stage, checks, type: error.name, location: error.stack?.split('\n').find(line => line.includes('editor-media-recovery.mjs'))?.trim() }));

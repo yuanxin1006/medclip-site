@@ -50,13 +50,15 @@ test("saved media identity persists while old projects retain their original cli
   assert.deepEqual(parseEditorProject(JSON.stringify(old))?.assets, old.assets);
 });
 
-test("only a new or subtitle-only project gets first-time initialization", () => {
+test("new, subtitle-only and legacy empty drafts need initialization until visuals were established", () => {
   const old = project();
-  assert.equal(needsInitialVisualTimeline(null, false), true);
-  assert.equal(needsInitialVisualTimeline(old, false), false);
+  assert.equal(needsInitialVisualTimeline(null), true);
+  assert.equal(needsInitialVisualTimeline(old), false);
+  assert.equal(needsInitialVisualTimeline({ ...old, visualTimelineInitialized: false }), false);
   old.tracks[0].clips = [];
-  assert.equal(needsInitialVisualTimeline({ ...old, visualTimelineInitialized: false }, true), true);
-  assert.equal(needsInitialVisualTimeline({ ...old, visualTimelineInitialized: true }, false), false);
+  assert.equal(needsInitialVisualTimeline(parseEditorProject(JSON.stringify(old))), true);
+  assert.equal(needsInitialVisualTimeline({ ...old, visualTimelineInitialized: false }), true);
+  assert.equal(needsInitialVisualTimeline({ ...old, visualTimelineInitialized: true }), false);
 });
 
 test("draft scopes and claimed legacy drafts cannot cross accounts or anonymous sessions", () => {
